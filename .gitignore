@@ -1,0 +1,8 @@
+a ne pas push/
+node_modules/
+.env
+dist/
+build/
+.vscode/
+.idea/
+*.log
