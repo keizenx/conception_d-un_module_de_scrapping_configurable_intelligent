@@ -1,8 +1,8 @@
 # Structure du Projet - Scraper Pro
 
-Voici l'organisation recommandée pour les dossiers du projet afin de faciliter le travail simultané d'Ornella, Oumar, Raphael et Richard.
+Voici l'organisation recommandée pour les dossiers du projet
 
-## 📂 Architecture Globale
+##  Architecture Globale
 ```text
 scraper-pro/
 ├── frontend/             # Projet React (Ornella & Richard)
@@ -11,7 +11,7 @@ scraper-pro/
 └── README.md             # Guide d'installation global
 ```
 
-## 🎨 Frontend (React)
+##  Frontend (React)
 Structure suggérée pour Ornella :
 ```text
 frontend/
@@ -31,7 +31,7 @@ frontend/
 └── package.json
 ```
 
-## ⚙️ Backend (Node.js/Express ou Python/FastAPI)
+##  Backend (Node.js/Express ou Python/FastAPI)
 Structure suggérée pour Oumar et Raphael :
 ```text
 backend/
