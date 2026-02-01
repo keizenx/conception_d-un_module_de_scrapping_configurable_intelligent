@@ -10,6 +10,7 @@ class AnalyzeRequest(BaseModel):
     url: HttpUrl
     max_candidates: int = 5
     max_items_preview: int = 5
+    use_js: bool = False
 
 
 @router.post("/analyze")
@@ -18,4 +19,5 @@ def analyze(req: AnalyzeRequest):
         url=str(req.url),
         max_candidates=req.max_candidates,
         max_items_preview=req.max_items_preview,
+        use_js=req.use_js,
     )

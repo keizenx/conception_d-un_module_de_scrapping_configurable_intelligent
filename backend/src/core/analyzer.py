@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from bs4 import BeautifulSoup, Tag
 
 from src.core.fetcher import fetch_html
+from src.core.fetcher_playwright import fetch_html_smart
 
 
 _PRICE_RE = re.compile(r"(?i)(£|€|\$)?\s?(\d{1,3}(?:[\s.,]\d{3})*(?:[.,]\d{2})?)\s?(£|€|eur|fcfa|xof|usd|\$|gbp)?")
@@ -19,8 +20,32 @@ def _clean_text(s: str) -> str:
 
 def _node_signature(tag: Tag) -> Tuple[str, Tuple[str, ...]]:
     classes = tag.get("class") or []
-    classes = tuple(sorted([c for c in classes if isinstance(c, str)]))
-    return tag.name, classes
+    filtered_classes = []
+    
+    semantic_patterns = [
+        'product', 'item', 'card', 'post', 'article', 'entry',
+        'listing', 'result', 'tile', 'box', 'container'
+    ]
+    
+    for c in classes:
+        if isinstance(c, str):
+            if re.match(r'^(post|id|item)-\d+', c):
+                continue
+            if c.startswith('js-'):
+                continue
+            if c.startswith('product_cat-') or c.startswith('product_tag-'):
+                continue
+            if c.startswith('category-') or c.startswith('tag-'):
+                continue
+            if c in ['first', 'last', 'odd', 'even']:
+                continue
+            
+            is_semantic = any(pattern in c.lower() for pattern in semantic_patterns)
+            if is_semantic or c in ['has-post-thumbnail', 'instock', 'status-publish', 'type-product']:
+                filtered_classes.append(c)
+    
+    filtered_classes = tuple(sorted(filtered_classes))
+    return tag.name, filtered_classes
 
 
 def _selector_for(tag: Tag, with_parent: bool = False) -> str:
@@ -105,16 +130,32 @@ class _Candidate:
 
 
 def _is_navigation_or_filter(container: Tag) -> bool:
+    if container.name in ["head", "nav", "header", "footer", "select", "script", "style"]:
+        return True
+    
     container_id = container.get("id", "").lower()
     container_classes = " ".join(container.get("class", [])).lower()
     
     nav_patterns = [
         "nav", "menu", "sidebar", "filter", "refinement", "facet",
-        "breadcrumb", "pagination", "footer", "header", "toolbar"
+        "breadcrumb", "pagination", "footer", "header", "toolbar",
+        "categories", "category-list", "page-numbers", "paging"
     ]
     
     for pattern in nav_patterns:
         if pattern in container_id or pattern in container_classes:
+            return True
+    
+    children = [c for c in container.find_all(recursive=False) if isinstance(c, Tag)]
+    if len(children) >= 4:
+        link_only_count = 0
+        for child in children[:10]:
+            child_text = _clean_text(child.get_text(" "))
+            links = child.find_all("a")
+            if links and len(child_text) < 50 and not child.find("img") and not child.find(class_=re.compile(r"(?i)(price|cost)")):
+                link_only_count += 1
+        
+        if link_only_count >= len(children[:10]) * 0.8:
             return True
     
     return False
@@ -141,7 +182,30 @@ def _find_repeating_candidates(soup: BeautifulSoup, max_candidates: int) -> List
             continue
 
         density = count / max(1, len(children))
-        score = count * density
+        base_score = count * density
+        
+        item_nodes = [ch for ch in children if ch.name == most_common[0]]
+        content_richness = 0.0
+        if item_nodes:
+            sample_size = min(3, len(item_nodes))
+            for node in item_nodes[:sample_size]:
+                has_image = bool(node.find("img"))
+                has_price = bool(node.find(class_=re.compile(r"(?i)(price|cost|amount)")))
+                has_title = bool(node.find(["h1", "h2", "h3", "h4", "h5", "h6"]))
+                
+                node_richness = 0
+                if has_image:
+                    node_richness += 2.0
+                if has_price:
+                    node_richness += 2.0
+                if has_title:
+                    node_richness += 1.5
+                
+                content_richness += node_richness
+            
+            content_richness = content_richness / sample_size
+        
+        score = base_score * (1.0 + content_richness)
 
         candidates.append(
             _Candidate(
@@ -167,8 +231,8 @@ def _find_repeating_candidates(soup: BeautifulSoup, max_candidates: int) -> List
     return unique
 
 
-def analyze_url(url: str, max_candidates: int = 5, max_items_preview: int = 5) -> Dict[str, Any]:
-    html = fetch_html(url)
+def analyze_url(url: str, max_candidates: int = 5, max_items_preview: int = 5, use_js: bool = False) -> Dict[str, Any]:
+    html = fetch_html_smart(url, use_js=use_js)
     soup = BeautifulSoup(html, "lxml")
 
     page_title = None
@@ -220,11 +284,25 @@ def analyze_url(url: str, max_candidates: int = 5, max_items_preview: int = 5) -
         if len(collections) >= max_candidates:
             break
 
+    # Créer un résumé pour meilleure lisibilité
+    summary = {
+        "total_collections_found": len(collections),
+        "best_collection": collections[0] if collections else None,
+        "detected_field_types": list(set(
+            field["type"] 
+            for collection in collections 
+            for item in collection["items_preview"] 
+            for field in item["fields"]
+        )) if collections else []
+    }
+
     return {
+        "success": True,
         "url": url,
         "page_title": page_title,
+        "summary": summary,
         "collections": collections,
-        "notes": {
+        "metadata": {
             "mode": "auto_analysis_mvp",
             "limitations": [
                 "Ce MVP analyse uniquement le HTML statique renvoyé par la requête (pas de rendu JS).",
