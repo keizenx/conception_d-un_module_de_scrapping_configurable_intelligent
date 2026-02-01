@@ -1,0 +1,20 @@
+/* Styles spécifiques pour la page d'inscription */
+.login-form .input-group {
+    margin-bottom: 25px;
+}
+
+.remember-me label span {
+    font-size: 0.85rem;
+    line-height: 1.6;
+}
+
+.remember-me a {
+    color: #3498db;
+    text-decoration: none;
+    transition: color 0.3s;
+}
+
+.remember-me a:hover {
+    color: #2ecc71;
+    text-decoration: underline;
+}

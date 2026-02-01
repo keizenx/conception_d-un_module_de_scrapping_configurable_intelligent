@@ -1,0 +1,137 @@
+.settings-container {
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(52, 152, 219, 0.2);
+    border-radius: 15px;
+    box-shadow: 
+        0 8px 32px rgba(0, 0, 0, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    overflow: hidden;
+    position: relative;
+}
+
+.settings-section {
+    padding: 30px;
+    border-bottom: 1px solid rgba(52, 152, 219, 0.2);
+    position: relative;
+    z-index: 1;
+}
+
+.settings-section:last-child {
+    border-bottom: none;
+}
+
+.settings-section h3 {
+    font-size: 1.3rem;
+    color: white;
+    margin-bottom: 25px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 600;
+}
+
+.settings-section h3 i {
+    color: #3498db;
+    filter: drop-shadow(0 0 8px rgba(52, 152, 219, 0.6));
+}
+
+.settings-form {
+    max-width: 600px;
+}
+
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-group label {
+    display: block;
+    font-weight: 600;
+    color: white;
+    margin-bottom: 8px;
+    font-size: 0.95rem;
+}
+
+.form-input {
+    width: 100%;
+    padding: 12px 15px;
+    border: 1px solid rgba(52, 152, 219, 0.3);
+    border-radius: 10px;
+    font-size: 1rem;
+    transition: all 0.3s;
+    font-family: inherit;
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(10px);
+    color: white;
+}
+
+.form-input::placeholder {
+    color: rgba(255, 255, 255, 0.4);
+}
+
+.form-input:focus {
+    outline: none;
+    border-color: #3498db;
+    background: rgba(255, 255, 255, 0.08);
+    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.2), 0 0 20px rgba(52, 152, 219, 0.3);
+}
+
+.form-input[readonly] {
+    background-color: rgba(0, 0, 0, 0.2);
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+.checkbox-setting {
+    display: flex;
+    align-items: flex-start;
+    gap: 15px;
+    margin-bottom: 20px;
+    padding: 15px;
+    background-color: #f8f9fa;
+    border-radius: 6px;
+}
+
+.checkbox-setting input[type="checkbox"] {
+    margin-top: 5px;
+    width: 18px;
+    height: 18px;
+    accent-color: #3498db;
+    flex-shrink: 0;
+}
+
+.checkbox-setting label {
+    cursor: pointer;
+    flex: 1;
+}
+
+.checkbox-setting {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(52, 152, 219, 0.2);
+    border-radius: 10px;
+}
+
+.checkbox-setting label strong {
+    display: block;
+    color: white;
+    margin-bottom: 5px;
+    font-size: 1rem;
+}
+
+.checkbox-setting label p {
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 0.9rem;
+    margin: 0;
+    line-height: 1.5;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .settings-section {
+        padding: 20px;
+    }
+    
+    .settings-form {
+        max-width: 100%;
+    }
+}
