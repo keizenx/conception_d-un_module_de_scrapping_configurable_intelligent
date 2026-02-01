@@ -1,0 +1,249 @@
+/* src/components/SmartInputBar/SmartInputBar.css */
+.smart-input-container {
+  background: #fff;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+}
+
+.input-type-selector {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 15px;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 15px;
+}
+
+.type-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  background: #f8f9fa;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #666;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.type-btn:hover {
+  background: #e9ecef;
+  color: #495057;
+}
+
+.type-btn.active {
+  background: #3498db;
+  color: white;
+  border-color: #2980b9;
+}
+
+.type-btn i {
+  font-size: 16px;
+}
+
+.type-description {
+  margin-bottom: 20px;
+  padding: 12px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #666;
+}
+
+.type-description i {
+  margin-right: 10px;
+  color: #3498db;
+}
+
+.input-form {
+  margin-bottom: 20px;
+}
+
+.input-wrapper {
+  position: relative;
+  margin-bottom: 15px;
+}
+
+.smart-input {
+  width: 100%;
+  padding: 15px;
+  font-size: 16px;
+  border: 2px solid #e9ecef;
+  border-radius: 8px;
+  background: #fff;
+  transition: all 0.3s ease;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.smart-input:focus {
+  outline: none;
+  border-color: #3498db;
+  box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+}
+
+.smart-input.error {
+  border-color: #e74c3c;
+  background-color: #fff5f5;
+}
+
+.smart-input.error:focus {
+  box-shadow: 0 0 0 3px rgba(231, 76, 60, 0.1);
+}
+
+textarea.smart-input {
+  min-height: 120px;
+  resize: vertical;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.input-status {
+  position: absolute;
+  right: 15px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.status-icon.valid {
+  color: #27ae60;
+}
+
+.status-icon.invalid {
+  color: #e74c3c;
+}
+
+.error-message {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 15px;
+  background: #fff5f5;
+  border: 1px solid #ffcdd2;
+  border-radius: 6px;
+  color: #c62828;
+  font-size: 14px;
+  margin-bottom: 15px;
+}
+
+.error-message i {
+  font-size: 16px;
+}
+
+.input-examples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 20px;
+  align-items: center;
+}
+
+.examples-label {
+  font-size: 14px;
+  color: #666;
+  font-weight: 500;
+}
+
+.example-btn {
+  padding: 6px 12px;
+  background: #f1f8ff;
+  border: 1px solid #d1e6ff;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #0366d6;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: monospace;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.example-btn:hover {
+  background: #ddeeff;
+  border-color: #a3d0ff;
+}
+
+.input-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.analyze-btn {
+  flex: 1;
+  padding: 12px 24px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.analyze-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.analyze-btn i {
+  margin-right: 10px;
+}
+
+.input-tips {
+  display: flex;
+  /* flex-direction: column; */
+   flex-direction: row;
+  gap: 10px;
+  padding-top: 20px;
+  border-top: 1px solid #eee;
+}
+
+.tip {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px;
+  background: #f8f9fa;
+  border-radius: 8px;
+}
+
+.tip i {
+  color: #f39c12;
+  font-size: 16px;
+  margin-top: 2px;
+}
+
+.tip div {
+  flex: 1;
+  font-size: 14px;
+  color: #666;
+}
+
+.tip strong {
+  color: #495057;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .input-type-selector {
+    flex-direction: column;
+  }
+  .input-tips {
+    flex-direction: column; /* sur petit écran */
+  }
+
+  
+  .type-btn {
+    width: 100%;
+    justify-content: center;
+  }
+  
+  .input-actions {
+    flex-direction: column;
+  }
+  
+  .example-btn {
+    max-width: 150px;
+  }
+}
