@@ -67,6 +67,34 @@ python test_playwright_ready.py
 
 ---
 
+### 🔁 `verify_flow.py` - Vérification du flux complet
+**Valide le flux Job → Scrape → Statut → Export**
+
+```bash
+python verify_flow.py
+```
+
+**Ce qu'il fait :**
+- Crée un job de scraping via l'API
+- Attend la complétion du job
+- Vérifie le statut et la robustesse (échec propre si aucune collection)
+
+---
+
+### 📦 `verify_export.py` - Test d'export CSV
+**Valide la génération de CSV avec des données factices**
+
+```bash
+python verify_export.py
+```
+
+**Ce qu'il fait :**
+- Insère un job factice en base (ScrapingJob)
+- Appelle l'endpoint `/export/{job_id}/csv`
+- Vérifie le contenu et la structure du CSV
+
+---
+
 ## 🔍 Scripts de debug
 
 ### `debug_analyze.py`
@@ -105,6 +133,8 @@ python debug_structure.py
 ```bash
 cd ..
 ..\venv\Scripts\python.exe -m uvicorn src.index:app --reload --port 8000
+# Alternative si le port 8000 est occupé :
+# ..\venv\Scripts\python.exe -m uvicorn src.index:app --reload --port 8001
 ```
 
 ### 2. Lancer les tests
