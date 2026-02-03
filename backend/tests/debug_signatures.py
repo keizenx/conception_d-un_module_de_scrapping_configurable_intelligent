@@ -9,7 +9,7 @@ soup = BeautifulSoup(html, "lxml")
 products = soup.find_all("li", class_="product")
 parent = products[0].parent
 
-children = [ch for ch in parent.find_all(recursive=False) if hasattr(ch, 'name')]
+children = [ch for ch in parent.find_all(recursive=False) if hasattr(ch, "name")]
 
 print(f"Enfants: {len(children)}")
 print(f"\nSignatures:")

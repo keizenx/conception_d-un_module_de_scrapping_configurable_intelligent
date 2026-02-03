@@ -1,1188 +1,1584 @@
-// src/pages/Results/Results.jsx - VERSION CONNECTÉE À L'ANALYSE
-import React, { useState, useEffect } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
-import Sidebar from '../../components/Sidebar';
-import '../../assets/css/dashboard.css';
+// C:\Users\Admin\Downloads\scrapping.web\scrapping.web\scraper-pro\frontend\src\pages\Results\Results.jsx
+// Page d'affichage des résultats de scraping avec tableau de données, filtres et export
+// Cette page permet de visualiser et gérer les données extraites d'une session de scraping
+// RELEVANT FILES: frontend/src/assets/css/results.css, frontend/src/App.jsx, backend/src/api/routes/export.py
+
+import { useState, useEffect, useRef } from 'react';
+import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
+import api from '../../services/api';
 import '../../assets/css/results.css';
 
-const Results = () => {
-  const location = useLocation();
+// Mapping des catégories vers des noms et icônes français
+const CATEGORY_CONFIG = {
+  main_headings: { icon: '📌', name: 'Titres Principaux', color: '#FF4D00' },
+  section_headings: { icon: '📑', name: 'Titres de Section', color: '#00E5FF' },
+  sub_headings: { icon: '📎', name: 'Sous-titres', color: '#00FF88' },
+  paragraphs: { icon: '📝', name: 'Paragraphes', color: '#FFB800' },
+  links: { icon: '🔗', name: 'Liens', color: '#9D4EDD' },
+  buttons: { icon: '🔘', name: 'Boutons', color: '#FF6B6B' },
+  lists: { icon: '📋', name: 'Listes', color: '#4ECDC4' },
+  navigation: { icon: '🧭', name: 'Navigation', color: '#45B7D1' },
+  footer: { icon: '📄', name: 'Pied de page', color: '#6C757D' },
+  code: { icon: '💻', name: 'Code', color: '#20C997' },
+  other: { icon: '📦', name: 'Autres contenus', color: '#ADB5BD' },
+  images: { icon: '🖼️', name: 'Images', color: '#E91E63' },
+  image: { icon: '🖼️', name: 'Images', color: '#E91E63' },
+  videos: { icon: '🎬', name: 'Vidéos', color: '#FF5722' },
+  video: { icon: '🎬', name: 'Vidéos', color: '#FF5722' },
+  audios: { icon: '🎵', name: 'Audio', color: '#9C27B0' },
+  documents: { icon: '📑', name: 'Documents', color: '#607D8B' },
+  text: { icon: '📝', name: 'Texte', color: '#FFB800' }
+};
+
+// Helper pour obtenir la config d'une catégorie
+const getCategoryConfig = (category) => {
+  const key = category?.toLowerCase().replace(/[\s-]/g, '_');
+  return CATEGORY_CONFIG[key] || { icon: '📦', name: category || 'Contenu', color: '#ADB5BD' };
+};
+
+function Results() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
   
-  // Récupérer les données depuis le state de navigation OU localStorage
-  const [scrapingData, setScrapingData] = useState(() => {
-    // Essayer de récupérer depuis le state de navigation
-    if (location.state?.scrapingData) {
-      return generateResultsFromAnalysis(location.state.scrapingData);
-    }
-    
-    // Sinon depuis localStorage
-    const saved = localStorage.getItem('scrapingConfig');
-    if (saved) {
-      return generateResultsFromAnalysis(JSON.parse(saved));
-    }
-    
-    // Données par défaut si rien n'est trouvé
-    return getEmptyResults();
-  });
-
-  const [exportModal, setExportModal] = useState(false);
-  const [selectedFormat, setSelectedFormat] = useState('json');
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
+  const [activeFilter, setActiveFilter] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
-  const [rowsPerPage, setRowsPerPage] = useState(25);
-
-  // Fonction pour générer des résultats BASÉS SUR L'ANALYSE
-  function generateResultsFromAnalysis(analysisData) {
-    console.log('Génération des résultats depuis:', analysisData);
- if (!analysisData) {
-    console.log('Aucune donnée d\'analyse');
-    return getEmptyResults();
-  }
+  const itemsPerPage = 10;
   
-  const { target, selectedElements, config, detectedElements } = analysisData;
+  // State pour les données de l'API
+  const [sessionId, setSessionId] = useState(null);
+  const [sessionInfo, setSessionInfo] = useState(null);
+  const [results, setResults] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
   
-  console.log('Éléments sélectionnés:', selectedElements);
-  console.log('Target:', target);
-    
-    // if (!analysisData) return getEmptyResults();
-    
-    // const { target, selectedElements, config, detectedElements } = analysisData;
-    
-    // // Si aucun élément sélectionné, retourner des résultats vides
-    // if (!selectedElements || selectedElements.length === 0) {
-    //   return getEmptyResults();
-    // }
-    
-    // Déterminer le type de contenu (utiliser la même logique que dans Analysis)
-    const getContentType = () => {
-      if (target.type === 'selector') {
-        const selector = target.input.toLowerCase();
-        if (selector.includes('.product') || selector.includes('.card')) return 'ecommerce';
-        if (selector.includes('article') || selector.includes('.post')) return 'blog';
-        if (selector.includes('.repo') || selector.includes('.repository')) return 'github';
-        if (selector.includes('.template') || selector.includes('.theme')) return 'template';
+  // State pour la sélection des éléments
+  const [selectedItems, setSelectedItems] = useState(new Set());
+  const [selectAll, setSelectAll] = useState(false);
+  
+  // State pour la prévisualisation
+  const [previewItem, setPreviewItem] = useState(null);
+  const [showPreview, setShowPreview] = useState(false);
+  
+  // State pour le format d'export pré-sélectionné (depuis la page Analysis)
+  const [preSelectedFormat, setPreSelectedFormat] = useState(null);
+  const [includeImagesZip, setIncludeImagesZip] = useState(false);
+  const [showExportPrompt, setShowExportPrompt] = useState(false);
+  const exportTriggered = useRef(false);
+  
+  // State pour l'export en cours (loading)
+  const [exportingFormat, setExportingFormat] = useState(null);
+  
+  // State pour le modal de sélection d'export
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportModalFormat, setExportModalFormat] = useState(null);
+  const [exportLimit, setExportLimit] = useState(100);
+  const [exportSelectedOnly, setExportSelectedOnly] = useState(false);
+  
+  // Récupérer l'ID de session et le format d'export depuis l'URL
+  useEffect(() => {
+    const loadSessionId = async () => {
+      const sessionFromParams = searchParams.get('session');
+      const formatFromParams = searchParams.get('format');
+      const imagesZipFromParams = searchParams.get('images_zip');
+      const sessionFromState = location.state?.sessionId;
+      const formatFromState = location.state?.exportFormat;
+      const imagesZipFromState = location.state?.includeImagesZip;
+      
+      let id = sessionFromParams || sessionFromState;
+      const format = formatFromParams || formatFromState;
+      const imagesZip = imagesZipFromParams === 'true' || imagesZipFromState;
+      
+      // Si pas de session dans l'URL, essayer de charger la dernière session de l'utilisateur
+      if (!id) {
+        try {
+          const latestSession = await api.getLatestSession();
+          if (latestSession && latestSession.session_id) {
+            id = latestSession.session_id;
+            console.log('[Results] Dernière session chargée:', id);
+          }
+        } catch (err) {
+          console.log('[Results] Pas de session récente trouvée:', err.message);
+        }
       }
       
-      if (target.type === 'url') {
-        const url = target.input.toLowerCase();
-        if (url.includes('amazon') || url.includes('ebay') || url.includes('shop')) return 'ecommerce';
-        if (url.includes('medium') || url.includes('blog') || url.includes('wordpress')) return 'blog';
-        if (url.includes('github')) return 'github';
-        if (url.includes('themeforest') || url.includes('template')) return 'template';
+      if (id) {
+        setSessionId(id);
+      } else {
+        setIsLoading(false);
       }
       
-      return target.type;
-    };
-
-    const contentType = getContentType();
-    
-    // Calculer le nombre total d'éléments basé sur les éléments sélectionnés
-    const totalElements = selectedElements.reduce((sum, el) => sum + (el.count || 0), 0);
-    
-    // Générer des données QUI CORRESPONDENT AUX ÉLÉMENTS SÉLECTIONNÉS
-    const data = generateDataForSelectedElements(selectedElements, totalElements, contentType, target);
-    
-    // Calculer les statistiques BASÉES SUR L'ANALYSE
-    const avgConfidence = selectedElements.length > 0 
-      ? Math.round(selectedElements.reduce((sum, el) => sum + (el.confidence || 0), 0) / selectedElements.length)
-      : 0;
-    
-    return {
-      metadata: {
-        projectName: config?.name || 'Scraping sans nom',
-        type: target.type,
-        url: target.type === 'url' ? target.input : undefined,
-        selector: target.type === 'selector' ? target.input : undefined,
-        html: target.type === 'html' ? target.input.substring(0, 100) + '...' : undefined,
-        contentType: contentType,
-        timestamp: new Date().toISOString(),
-        elementsScraped: totalElements,
-        selectedElements: selectedElements.map(el => ({
-          name: el.name,
-          count: el.count,
-          selector: el.selector,
-          confidence: el.confidence,
-          icon: el.icon
-        })),
-        allDetectedElements: detectedElements // Garder trace de tous les éléments détectés
-      },
-      data: data,
-      statistics: {
-        totalVolume: calculateTotalVolume(selectedElements),
-        successRate: `${avgConfidence}%`,
-        avgExtractionTime: calculateExtractionTime(selectedElements, config),
-        elementsCount: totalElements,
-        lastUpdated: 'À l\'instant'
+      // Stocker le format pré-sélectionné
+      if (format && format !== 'none') {
+        setPreSelectedFormat(format);
+      }
+      
+      // Stocker l'option images ZIP
+      if (imagesZip) {
+        setIncludeImagesZip(true);
       }
     };
-  }
-
-  // Générer des données SPÉCIFIQUES pour chaque élément sélectionné
-  function generateDataForSelectedElements(selectedElements, totalCount, contentType, target) {
-    const data = [];
-    const itemCount = Math.min(totalCount, 100); // Limiter pour la démo
     
-    // Mapper les éléments sélectionnés pour savoir quelles données générer
-    const hasProducts = selectedElements.some(el => 
-      el.name.toLowerCase().includes('produit') || 
-      el.name.toLowerCase().includes('product')
-    );
-    
-    const hasPrices = selectedElements.some(el => 
-      el.name.toLowerCase().includes('prix') || 
-      el.name.toLowerCase().includes('price')
-    );
-    
-    const hasArticles = selectedElements.some(el => 
-      el.name.toLowerCase().includes('article') || 
-      el.name.toLowerCase().includes('post')
-    );
-    
-    const hasTitles = selectedElements.some(el => 
-      el.name.toLowerCase().includes('titre') || 
-      el.name.toLowerCase().includes('title')
-    );
-    
-    const hasAuthors = selectedElements.some(el => 
-      el.name.toLowerCase().includes('auteur') || 
-      el.name.toLowerCase().includes('author')
-    );
-    
-    const hasImages = selectedElements.some(el => 
-      el.name.toLowerCase().includes('image') || 
-      el.name.toLowerCase().includes('img')
-    );
-    
-    const hasReviews = selectedElements.some(el => 
-      el.name.toLowerCase().includes('avis') || 
-      el.name.toLowerCase().includes('review') ||
-      el.name.toLowerCase().includes('rating')
-    );
-    
-    const hasCategories = selectedElements.some(el => 
-      el.name.toLowerCase().includes('catégorie') || 
-      el.name.toLowerCase().includes('category')
-    );
-    
-    const hasRepositories = selectedElements.some(el => 
-      el.name.toLowerCase().includes('repository') || 
-      el.name.toLowerCase().includes('repo')
-    );
-    
-    const hasStars = selectedElements.some(el => 
-      el.name.toLowerCase().includes('star') || 
-      el.name.toLowerCase().includes('étoile')
-    );
-    
-    const hasTemplates = selectedElements.some(el => 
-      el.name.toLowerCase().includes('template') || 
-      el.name.toLowerCase().includes('theme')
-    );
-
-    // Générer les données selon le type de contenu ET les éléments sélectionnés
-    for (let i = 1; i <= itemCount; i++) {
-      const item = { id: i };
-      
-      if (contentType === 'ecommerce' || hasProducts) {
-        if (hasProducts) {
-          item.name = `Produit ${i} - ${getRandomProductName()}`;
-        }
-        
-        if (hasPrices) {
-          item.price = `${getRandomPrice()}€`;
-          if (Math.random() > 0.7) {
-            item.originalPrice = `${(parseFloat(item.price) * 1.2).toFixed(2)}€`;
-            item.discount = `${Math.floor(Math.random() * 30)}%`;
-          }
-        }
-        
-        if (hasImages) {
-          item.image = `product-image-${i}.jpg`;
-          item.imageCount = Math.floor(Math.random() * 5) + 1;
-        }
-        
-        if (hasReviews) {
-          item.rating = (Math.random() * 2 + 3).toFixed(1);
-          item.reviewCount = Math.floor(Math.random() * 500);
-        }
-        
-        if (hasCategories) {
-          item.category = getRandomCategory();
-          item.subcategory = getRandomSubcategory(item.category);
-        }
-        
-        item.stock = getRandomStockStatus();
-        item.date = getRandomRecentDate();
-        item.type = 'product';
+    loadSessionId();
+  }, [searchParams, location]);
+  
+  // Charger les résultats depuis l'API
+  useEffect(() => {
+    const loadResults = async () => {
+      if (!sessionId) {
+        setIsLoading(false);
+        return;
       }
       
-      else if (contentType === 'blog' || hasArticles) {
-        if (hasTitles || hasArticles) {
-          item.title = `${getRandomArticleTitle()} ${i}`;
-        }
+      try {
+        setIsLoading(true);
+        setError(null);
         
-        if (hasArticles) {
-          item.excerpt = `Extrait de l'article ${i}. Ceci est un contenu intéressant sur ${getRandomTopic()}...`;
-          item.contentLength = `${Math.floor(Math.random() * 2000) + 500} mots`;
-        }
+        // Charger les résultats avec filtres
+        const filters = {
+          search: searchTerm,
+          status: activeFilter === 'all' ? null : activeFilter
+        };
         
-        if (hasAuthors) {
-          item.author = getRandomAuthor();
-          item.authorBio = `Auteur spécialisé en ${getRandomTopic()}`;
-        }
+        const data = await api.getResults(sessionId, filters);
         
-        if (hasCategories) {
-          item.category = getRandomBlogCategory();
-          item.tags = getRandomTags(3);
-        }
-        
-        item.date = getRandomRecentDate();
-        item.views = Math.floor(Math.random() * 10000);
-        item.readTime = `${Math.ceil(Math.random() * 20)} min`;
-        item.type = 'article';
-      }
-      
-      else if (contentType === 'github' || hasRepositories) {
-        if (hasRepositories || hasTitles) {
-          item.repository = `${getRandomTech()}-project-${i}`;
-          item.description = `Repository ${i}: ${getRandomDescription()}`;
-        }
-        
-        if (hasStars) {
-          item.stars = Math.floor(Math.random() * 10000);
-          item.starTrend = Math.random() > 0.5 ? 'up' : 'down';
-        }
-        
-        item.forks = Math.floor(Math.random() * 500);
-        item.language = getRandomLanguage();
-        item.lastCommit = getRandomRecentDate();
-        item.issues = Math.floor(Math.random() * 50);
-        item.topics = getRandomTopics(4);
-        item.type = 'repository';
-      }
-      
-      else if (contentType === 'template' || hasTemplates) {
-        if (hasTemplates || hasTitles) {
-          item.templateName = `${getRandomTemplateType()} Template ${i}`;
-          item.description = `Template professionnel pour ${getRandomTemplatePurpose()}`;
-        }
-        
-        if (hasPrices) {
-          item.price = `${getRandomTemplatePrice()}$`;
-          item.license = getRandomLicense();
-        }
-        
-        if (hasCategories) {
-          item.category = getRandomTemplateCategory();
-          item.framework = getRandomFramework();
-        }
-        
-        item.sales = Math.floor(Math.random() * 1000);
-        item.rating = (Math.random() * 2 + 3).toFixed(1);
-        item.lastUpdate = getRandomRecentDate();
-        item.features = getRandomFeatures(5);
-        item.type = 'template';
-      }
-      
-      else {
-        // Données génériques basées sur les éléments sélectionnés
-        selectedElements.forEach((element, index) => {
-          const key = element.name.toLowerCase().replace(/\s+/g, '_');
-          item[key] = `Donnée ${i} pour ${element.name}`;
-          
-          if (element.selector) {
-            item[`${key}_selector`] = element.selector;
-          }
-          
-          if (element.count) {
-            item[`${key}_count`] = element.count;
-          }
+        // Mettre à jour les infos de session depuis la structure réelle de l'API
+        setSessionInfo({
+          status: data.status || 'completed',
+          date: data.metadata?.created_at ? new Date(data.metadata.created_at).toLocaleDateString('fr-FR') : new Date().toLocaleDateString('fr-FR'),
+          items: data.statistics?.total_items || 0,
+          url: data.url || ''
         });
         
-        item.type = 'generic';
-        item.date = getRandomRecentDate();
-      }
-      
-      data.push(item);
-    }
-    
-    return data;
-  }
-
-  // Fonctions utilitaires pour générer des données réalistes
-  function getRandomProductName() {
-    const products = ['iPhone', 'Samsung Galaxy', 'Google Pixel', 'MacBook Pro', 'iPad', 'AirPods', 'PlayStation', 'Xbox', 'Nintendo Switch'];
-    const adjectives = ['Pro', 'Max', 'Ultra', 'Premium', 'Elite', 'Standard', 'Lite', 'Edition'];
-    return `${products[Math.floor(Math.random() * products.length)]} ${adjectives[Math.floor(Math.random() * adjectives.length)]}`;
-  }
-
-  function getRandomPrice() {
-    const prices = [99.99, 129.99, 199.99, 249.99, 299.99, 399.99, 499.99, 799.99, 999.99, 1299.99];
-    return prices[Math.floor(Math.random() * prices.length)];
-  }
-
-  function getRandomCategory() {
-    const categories = ['Électronique', 'Mode', 'Maison', 'Sport', 'Jeux', 'Livres', 'Beauté', 'Santé'];
-    return categories[Math.floor(Math.random() * categories.length)];
-  }
-
-  function getRandomSubcategory(category) {
-    const subcategories = {
-      'Électronique': ['Smartphones', 'Ordinateurs', 'Audio', 'Photographie'],
-      'Mode': ['Vêtements', 'Chaussures', 'Accessoires', 'Montres'],
-      'Maison': ['Meubles', 'Décoration', 'Cuisine', 'Jardin'],
-      'Sport': ['Fitness', 'Running', 'Yoga', 'Cyclisme']
-    };
-    return subcategories[category] ? subcategories[category][Math.floor(Math.random() * subcategories[category].length)] : 'Autre';
-  }
-
-  function getRandomStockStatus() {
-    const statuses = ['in-stock', 'low-stock', 'out-of-stock', 'pre-order'];
-    return statuses[Math.floor(Math.random() * statuses.length)];
-  }
-
-  function getRandomArticleTitle() {
-    const prefixes = ['Guide complet', 'Tutoriel', 'Nouvelle', 'Analyse', 'Revue', 'Comparaison', 'Tips & Tricks'];
-    const topics = ['React', 'Vue.js', 'Node.js', 'TypeScript', 'Python', 'Machine Learning', 'Web Design', 'SEO'];
-    return `${prefixes[Math.floor(Math.random() * prefixes.length)]} sur ${topics[Math.floor(Math.random() * topics.length)]}`;
-  }
-
-  function getRandomTopic() {
-    const topics = ['React', 'JavaScript', 'Python', 'AI', 'Web Development', 'Design', 'Marketing', 'Productivity'];
-    return topics[Math.floor(Math.random() * topics.length)];
-  }
-
-  function getRandomAuthor() {
-    const authors = ['Jean Dupont', 'Marie Martin', 'Alexandre Bernard', 'Sophie Lambert', 'Thomas Petit', 'Camille Robert'];
-    return authors[Math.floor(Math.random() * authors.length)];
-  }
-
-  function getRandomBlogCategory() {
-    const categories = ['Technologie', 'Design', 'Business', 'Lifestyle', 'Productivité', 'Éducation'];
-    return categories[Math.floor(Math.random() * categories.length)];
-  }
-
-  function getRandomTags(count) {
-    const tags = ['web', 'frontend', 'backend', 'fullstack', 'javascript', 'react', 'vue', 'node', 'python', 'ai'];
-    return tags.sort(() => 0.5 - Math.random()).slice(0, count);
-  }
-
-  function getRandomTech() {
-    const techs = ['react', 'vue', 'nextjs', 'nuxt', 'angular', 'svelte', 'typescript', 'python'];
-    return techs[Math.floor(Math.random() * techs.length)];
-  }
-
-  function getRandomDescription() {
-    const descs = ['Framework moderne', 'Library puissante', 'Tool pratique', 'Template utile', 'Projet open-source'];
-    return descs[Math.floor(Math.random() * descs.length)];
-  }
-
-  function getRandomLanguage() {
-    const langs = ['JavaScript', 'TypeScript', 'Python', 'Go', 'Rust', 'Java', 'C++', 'PHP'];
-    return langs[Math.floor(Math.random() * langs.length)];
-  }
-
-  function getRandomTopics(count) {
-    const topics = ['web', 'frontend', 'backend', 'fullstack', 'api', 'database', 'security', 'performance'];
-    return topics.sort(() => 0.5 - Math.random()).slice(0, count);
-  }
-
-  function getRandomTemplateType() {
-    const types = ['Business', 'Creative', 'Portfolio', 'E-commerce', 'Corporate', 'Minimal', 'Modern'];
-    return types[Math.floor(Math.random() * types.length)];
-  }
-
-  function getRandomTemplatePurpose() {
-    const purposes = ['site vitrine', 'blog professionnel', 'boutique en ligne', 'portfolio créatif', 'landing page'];
-    return purposes[Math.floor(Math.random() * purposes.length)];
-  }
-
-  function getRandomTemplatePrice() {
-    const prices = [29, 49, 79, 99, 149, 199];
-    return prices[Math.floor(Math.random() * prices.length)];
-  }
-
-  function getRandomLicense() {
-    const licenses = ['Licence Standard', 'Licence Étendue', 'Licence Développeur'];
-    return licenses[Math.floor(Math.random() * licenses.length)];
-  }
-
-  function getRandomTemplateCategory() {
-    const categories = ['HTML', 'WordPress', 'React', 'Vue', 'Shopify', 'Webflow'];
-    return categories[Math.floor(Math.random() * categories.length)];
-  }
-
-  function getRandomFramework() {
-    const frameworks = ['Bootstrap', 'Tailwind', 'Material-UI', 'Bulma', 'Foundation'];
-    return frameworks[Math.floor(Math.random() * frameworks.length)];
-  }
-
-  function getRandomFeatures(count) {
-    const features = ['Responsive', 'SEO Friendly', 'Customizable', 'Well Documented', 'Fast Loading', 'Cross Browser', 'Retina Ready'];
-    return features.sort(() => 0.5 - Math.random()).slice(0, count);
-  }
-
-  function getRandomRecentDate() {
-    const now = new Date();
-    const randomHours = Math.floor(Math.random() * 168); // Jusqu'à 7 jours dans le passé
-    const date = new Date(now.getTime() - randomHours * 3600000);
-    
-    return date.toLocaleString('fr-FR', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  }
-
-  function calculateTotalVolume(selectedElements) {
-    const totalElements = selectedElements.reduce((sum, el) => sum + (el.count || 0), 0);
-    const avgBytesPerElement = 200; // Estimation moyenne
-    const totalBytes = totalElements * avgBytesPerElement;
-    return `${(totalBytes / (1024 * 1024)).toFixed(1)} MB`;
-  }
-
-  function calculateExtractionTime(selectedElements, config) {
-    const totalElements = selectedElements.reduce((sum, el) => sum + (el.count || 0), 0);
-    const delay = config?.delay || 'normal';
-    const delayMs = {
-      'fast': 100,
-      'normal': 500,
-      'slow': 1000,
-      'very-slow': 2000
-    }[delay] || 500;
-    
-    const totalTime = (totalElements * delayMs) / 1000;
-    return `${(totalTime / 60).toFixed(1)} min`;
-  }
-
-  function getEmptyResults() {
-    return {
-      metadata: {
-        projectName: 'Aucun scraping en cours',
-        type: 'none',
-        selectedElements: [],
-        elementsScraped: 0
-      },
-      data: [],
-      statistics: {
-        totalVolume: '0 MB',
-        successRate: '0%',
-        avgExtractionTime: '0s',
-        elementsCount: 0,
-        lastUpdated: 'Jamais'
-      }
-    };
-  }
-
-  // Charger les données au montage
-//   useEffect(() => {
-//     const savedConfig = localStorage.getItem('scrapingConfig');
-//     if (savedConfig) {
-//       try {
-//         const analysisData = JSON.parse(savedConfig);
-//         setScrapingData(generateResultsFromAnalysis(analysisData));
-//       } catch (error) {
-//         console.error('Erreur de parsing de la configuration:', error);
-//       }
-//     }
-//   }, []);
-useEffect(() => {
-  // D'abord essayer depuis le state de navigation
-  if (location.state?.scrapingData) {
-    console.log('Données reçues depuis le state:', location.state.scrapingData);
-    const results = generateResultsFromAnalysis(location.state.scrapingData);
-    setScrapingData(results);
-    
-    // Sauvegarder aussi dans localStorage pour persistance
-    localStorage.setItem('scrapingConfig', JSON.stringify(location.state.scrapingData));
-    return;
-  }
-  
-  // Sinon depuis localStorage
-  const savedConfig = localStorage.getItem('scrapingConfig');
-  if (savedConfig) {
-    console.log('Données chargées depuis localStorage:', savedConfig);
-    try {
-      const analysisData = JSON.parse(savedConfig);
-      const results = generateResultsFromAnalysis(analysisData);
-      setScrapingData(results);
-    } catch (error) {
-      console.error('Erreur de parsing de la configuration:', error);
-    }
-  } else {
-    console.log('Aucune configuration trouvée');
-    setScrapingData(getEmptyResults());
-  }
-}, [location.state]); 
-
-  // Rendu des colonnes BASÉ SUR LES ÉLÉMENTS SÉLECTIONNÉS
-  const renderTableHeaders = () => {
-    const { selectedElements, contentType } = scrapingData.metadata;
-    
-    if (selectedElements.length === 0) {
-      return (
-        <>
-          <th>AUCUN ÉLÉMENT</th>
-          <th>SÉLECTIONNÉ</th>
-        </>
-      );
-    }
-    
-    // Afficher les colonnes selon les éléments sélectionnés
-    const headers = [];
-    
-    selectedElements.forEach(element => {
-      const elementName = element.name.toLowerCase();
-      
-      if (elementName.includes('produit') || elementName.includes('product') || 
-          elementName.includes('template') || elementName.includes('repository')) {
-        headers.push(
-          <th key={`header-${element.name}`} onClick={() => handleSort('name')}>
-            {element.name.toUpperCase()}
-            {sortConfig.key === 'name' && (
-              <i className={`fas fa-arrow-${sortConfig.direction === 'asc' ? 'up' : 'down'}`}></i>
-            )}
-          </th>
-        );
-      }
-      
-      if (elementName.includes('prix') || elementName.includes('price')) {
-        headers.push(
-          <th key={`header-price`} onClick={() => handleSort('price')}>
-            PRIX
-            {sortConfig.key === 'price' && (
-              <i className={`fas fa-arrow-${sortConfig.direction === 'asc' ? 'up' : 'down'}`}></i>
-            )}
-          </th>
-        );
-      }
-      
-      if (elementName.includes('titre') || elementName.includes('title')) {
-        headers.push(<th key={`header-title`}>TITRE</th>);
-      }
-      
-      if (elementName.includes('auteur') || elementName.includes('author')) {
-        headers.push(<th key={`header-author`}>AUTEUR</th>);
-      }
-      
-      if (elementName.includes('image') || elementName.includes('img')) {
-        headers.push(<th key={`header-image`}>IMAGES</th>);
-      }
-      
-      if (elementName.includes('avis') || elementName.includes('review') || elementName.includes('rating')) {
-        headers.push(<th key={`header-rating`}>NOTATION</th>);
-      }
-      
-      if (elementName.includes('catégorie') || elementName.includes('category')) {
-        headers.push(<th key={`header-category`}>CATÉGORIE</th>);
-      }
-      
-      if (elementName.includes('star') || elementName.includes('étoile')) {
-        headers.push(
-          <th key={`header-stars`} onClick={() => handleSort('stars')}>
-            STARS
-            {sortConfig.key === 'stars' && (
-              <i className={`fas fa-arrow-${sortConfig.direction === 'asc' ? 'up' : 'down'}`}></i>
-            )}
-          </th>
-        );
-      }
-      
-      if (elementName.includes('language') || elementName.includes('langage')) {
-        headers.push(<th key={`header-language`}>LANGAGE</th>);
-      }
-    });
-    
-    // Colonnes communes
-    headers.push(<th key="header-date">DATE EXTRACTION</th>);
-    headers.push(<th key="header-actions">ACTIONS</th>);
-    
-    return headers;
-  };
-
-  // Rendu des lignes BASÉ SUR LES DONNÉES GÉNÉRÉES
-  const renderTableRow = (item) => {
-    const { selectedElements } = scrapingData.metadata;
-    
-    return (
-      <tr key={item.id}>
-        {selectedElements.map(element => {
-          const elementName = element.name.toLowerCase();
+        // Transformer scraped_data vers le format attendu par le tableau
+        // Supporte maintenant les données GROUPÉES
+        const transformedResults = (data.scraped_data || []).map((item, index) => {
+          const titre = item.titre || item.title || '';
+          const isGrouped = item.elements && Array.isArray(item.elements);
+          const type = item.type_contenu || item.type_media || item.category || 'text';
           
-          if (elementName.includes('produit') || elementName.includes('product')) {
-            return (
-              <td key={`cell-${element.name}-${item.id}`}>
-                <div className="product-info">
-                  <div className="product-image-placeholder">
-                    <i className={element.icon || "fas fa-box"}></i>
-                  </div>
-                  <div>
-                    <strong>{item.name || `Produit ${item.id}`}</strong>
-                    {item.description && <p className="product-description">{item.description}</p>}
-                  </div>
-                </div>
-              </td>
-            );
+          // Pour les médias groupés
+          const isMediaGroup = item.type_media && isGrouped;
+          const isImage = type === 'image' || item.categorie === 'images';
+          const isVideo = type === 'video' || item.categorie === 'videos';
+          const isLink = type === 'link' || item.categorie === 'links';
+          
+          // Construire le contenu selon le type
+          let content = '';
+          let elements = [];
+          
+          if (isGrouped) {
+            elements = item.elements;
+            if (isMediaGroup) {
+              // Pour les médias, montrer les URLs
+              content = elements.map(el => el.src || el.title || '').join('\n');
+            } else {
+              // Pour les textes groupés
+              content = elements.join('\n\n');
+            }
+          } else {
+            content = item.contenu || item.content || item.apercu || '';
           }
           
-          if (elementName.includes('prix') || elementName.includes('price')) {
-            return (
-              <td key={`cell-price-${item.id}`}>
-                <span className="product-price">{item.price || 'N/A'}</span>
-                {item.discount && (
-                  <span className="price-change negative">-{item.discount}</span>
-                )}
-                {item.originalPrice && (
-                  <div className="original-price">{item.originalPrice}</div>
-                )}
-              </td>
-            );
-          }
-          
-          if (elementName.includes('titre') || elementName.includes('title')) {
-            return (
-              <td key={`cell-title-${item.id}`}>
-                <strong>{item.title || `Titre ${item.id}`}</strong>
-                {item.excerpt && <p className="article-excerpt">{item.excerpt}</p>}
-              </td>
-            );
-          }
-          
-          if (elementName.includes('auteur') || elementName.includes('author')) {
-            return (
-              <td key={`cell-author-${item.id}`}>
-                <div className="author-info">
-                  <i className="fas fa-user"></i>
-                  <span>{item.author || 'Auteur inconnu'}</span>
-                </div>
-              </td>
-            );
-          }
-          
-          if (elementName.includes('image') || elementName.includes('img')) {
-            return (
-              <td key={`cell-image-${item.id}`}>
-                <div className="image-info">
-                  <i className="fas fa-image"></i>
-                  <span>{item.imageCount || 1} image(s)</span>
-                </div>
-              </td>
-            );
-          }
-          
-          if (elementName.includes('avis') || elementName.includes('review') || elementName.includes('rating')) {
-            return (
-              <td key={`cell-rating-${item.id}`}>
-                <div className="rating-info">
-                  <div className="stars">
-                    {'★'.repeat(Math.floor(item.rating || 0))}
-                    {'☆'.repeat(5 - Math.floor(item.rating || 0))}
-                  </div>
-                  <span>{item.rating || '0.0'}/5</span>
-                  {item.reviewCount && <small>({item.reviewCount} avis)</small>}
-                </div>
-              </td>
-            );
-          }
-          
-          if (elementName.includes('catégorie') || elementName.includes('category')) {
-            return (
-              <td key={`cell-category-${item.id}`}>
-                <span className="category-badge">{item.category || 'Non catégorisé'}</span>
-                {item.subcategory && <small>{item.subcategory}</small>}
-              </td>
-            );
-          }
-          
-          if (elementName.includes('stock') || elementName.includes('in-stock')) {
-            return (
-              <td key={`cell-stock-${item.id}`}>
-                <span className={`stock-status ${item.stock || 'unknown'}`}>
-                  {item.stock === 'in-stock' ? 'En Stock' : 
-                   item.stock === 'low-stock' ? 'Stock Faible' : 
-                   item.stock === 'out-of-stock' ? 'Rupture' : 
-                   'Inconnu'}
-                </span>
-              </td>
-            );
-          }
-          
-          if (elementName.includes('star') || elementName.includes('étoile')) {
-            return (
-              <td key={`cell-stars-${item.id}`}>
-                <span className="stars-count">
-                  <i className="fas fa-star"></i>
-                  {item.stars ? item.stars.toLocaleString() : '0'}
-                </span>
-              </td>
-            );
-          }
-          
-          if (elementName.includes('language') || elementName.includes('langage')) {
-            return (
-              <td key={`cell-language-${item.id}`}>
-                <span className="language-badge">{item.language || 'Inconnu'}</span>
-              </td>
-            );
-          }
-          
-          if (elementName.includes('template')) {
-            return (
-              <td key={`cell-template-${item.id}`}>
-                <strong>{item.templateName || `Template ${item.id}`}</strong>
-                {item.description && <p className="template-description">{item.description}</p>}
-              </td>
-            );
-          }
-          
-          if (elementName.includes('repository') || elementName.includes('repo')) {
-            return (
-              <td key={`cell-repo-${item.id}`}>
-                <div className="repo-info">
-                  <i className="fab fa-github"></i>
-                  <div>
-                    <strong>{item.repository || `repo-${item.id}`}</strong>
-                    {item.description && <p className="repo-description">{item.description}</p>}
-                  </div>
-                </div>
-              </td>
-            );
-          }
-          
-          // Pour les éléments génériques
-          return (
-            <td key={`cell-generic-${element.name}-${item.id}`}>
-              {item[element.name.toLowerCase().replace(/\s+/g, '_')] || `Donnée ${item.id}`}
-            </td>
-          );
-        })}
+          return {
+            id: index + 1,
+            title: titre,
+            category: item.categorie || type,
+            content: content,
+            preview: item.apercu || content.substring(0, 150),
+            isGrouped,
+            isMediaGroup,
+            isImage,
+            isVideo,
+            isLink,
+            nbElements: item.nb_elements || 1,
+            elements: elements,
+            // Pour les images groupées
+            imageSrc: isImage && elements.length > 0 ? elements[0].src : (item.url_media || null),
+            videoSrc: isVideo && elements.length > 0 ? elements[0].src : null,
+            linkHref: isLink ? (item.href || item.url || null) : null,
+            rawData: item
+          };
+        });
         
-        <td>{item.date || new Date().toLocaleString('fr-FR')}</td>
-        <td className="actions-cell">
-          <button className="action-btn" title="Voir les détails" onClick={() => viewDetails(item)}>
-            <i className="fas fa-eye"></i>
-          </button>
-          <button className="action-btn" title="Exporter" onClick={() => exportItem(item)}>
-            <i className="fas fa-download"></i>
-          </button>
-          <button className="action-btn" title="Plus d'options">
-            <i className="fas fa-ellipsis-v"></i>
-          </button>
-        </td>
-      </tr>
-    );
-  };
-
-  // Filtrage et tri
-  const filteredData = scrapingData.data.filter(item => {
-    if (!searchTerm) return true;
+        setResults(transformedResults);
+        
+      } catch (err) {
+        console.error('Erreur lors du chargement des résultats:', err);
+        setError(err.message || 'Erreur lors du chargement des résultats');
+      } finally {
+        setIsLoading(false);
+      }
+    };
     
-    const searchable = Object.values(item).join(' ').toLowerCase();
-    return searchable.includes(searchTerm.toLowerCase());
+    loadResults();
+  }, [sessionId, searchTerm, activeFilter]);
+  
+  // Déclencher le prompt d'export automatique si un format est pré-sélectionné
+  useEffect(() => {
+    if (!isLoading && results.length > 0 && preSelectedFormat && !exportTriggered.current) {
+      exportTriggered.current = true;
+      setShowExportPrompt(true);
+    }
+  }, [isLoading, results, preSelectedFormat]);
+  
+  const dataSource = results;
+  
+  // Filtrage des données - adapté aux données réelles du scraper
+  const filteredProducts = dataSource.filter(item => {
+    const searchLower = searchTerm.toLowerCase();
+    const matchesSearch = 
+      (item.title || '').toLowerCase().includes(searchLower) ||
+      (item.category || '').toLowerCase().includes(searchLower) ||
+      (item.content || '').toLowerCase().includes(searchLower) ||
+      (item.preview || '').toLowerCase().includes(searchLower);
+    
+    if (activeFilter === 'all') return matchesSearch;
+    if (activeFilter === 'new') return matchesSearch && item.stockStatus === 'success';
+    if (activeFilter === 'errors') return matchesSearch && item.stockStatus === 'error';
+    return matchesSearch;
   });
 
-  const sortedData = [...filteredData].sort((a, b) => {
-    if (!sortConfig.key) return 0;
+  // Pagination
+  const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const paginatedProducts = filteredProducts.slice(startIndex, startIndex + itemsPerPage);
+
+  // Gestion de la sélection
+  const handleSelectItem = (itemId) => {
+    const newSelected = new Set(selectedItems);
+    if (newSelected.has(itemId)) {
+      newSelected.delete(itemId);
+    } else {
+      newSelected.add(itemId);
+    }
+    setSelectedItems(newSelected);
+    setSelectAll(newSelected.size === filteredProducts.length);
+  };
+
+  const handleSelectAll = () => {
+    if (selectAll) {
+      setSelectedItems(new Set());
+    } else {
+      setSelectedItems(new Set(filteredProducts.map(item => item.id)));
+    }
+    setSelectAll(!selectAll);
+  };
+
+  const handleSelectPage = () => {
+    const newSelected = new Set(selectedItems);
+    const pageItemIds = paginatedProducts.map(item => item.id);
+    const allPageSelected = pageItemIds.every(id => selectedItems.has(id));
     
-    let aVal = a[sortConfig.key];
-    let bVal = b[sortConfig.key];
-    
-    if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
-    if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
-    return 0;
-  });
-
-  const totalPages = Math.ceil(sortedData.length / rowsPerPage);
-  const paginatedData = sortedData.slice(
-    (currentPage - 1) * rowsPerPage,
-    currentPage * rowsPerPage
-  );
-
-  const handleSort = (key) => {
-    setSortConfig(prev => ({
-      key,
-      direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc'
-    }));
+    if (allPageSelected) {
+      pageItemIds.forEach(id => newSelected.delete(id));
+    } else {
+      pageItemIds.forEach(id => newSelected.add(id));
+    }
+    setSelectedItems(newSelected);
   };
 
-  const viewDetails = (item) => {
-    console.log('View details:', item);
-    alert(`Détails de l'élément #${item.id}\n\n${JSON.stringify(item, null, 2)}`);
-  };
+  // Export des éléments sélectionnés
+  const handleExportSelected = async (format) => {
+    if (selectedItems.size === 0) {
+      alert('Veuillez sélectionner au moins un élément à exporter');
+      return;
+    }
 
-  const exportItem = (item) => {
-    const blob = new Blob([JSON.stringify(item, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `element-${item.id}-${Date.now()}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
-  const exportToFormat = (format) => {
+    const selectedData = results.filter(item => selectedItems.has(item.id));
     let content, mimeType, extension;
+
+    if (format === 'json') {
+      content = JSON.stringify(selectedData, null, 2);
+      mimeType = 'application/json';
+      extension = 'json';
+    } else if (format === 'pdf') {
+      // Export PDF
+      await generatePDF(selectedData, `scraping_session_${sessionId}`);
+      return;
+    } else if (format === 'csv') {
+      const headers = ['ID', 'Titre', 'Contenu', 'Type', 'URL'];
+      const rows = selectedData.map(item => [
+        item.id,
+        `"${(item.title || '').replace(/"/g, '""')}"`,
+        `"${(item.content || item.preview || '').replace(/"/g, '""')}"`,
+        item.category || 'text',
+        item.url || '-'
+      ]);
+      content = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+      mimeType = 'text/csv';
+      extension = 'csv';
+    } else {
+      // Excel - export as CSV with BOM for Excel compatibility
+      const headers = ['ID', 'Titre', 'Contenu', 'Type', 'URL'];
+      const rows = selectedData.map(item => [
+        item.id,
+        `"${(item.title || '').replace(/"/g, '""')}"`,
+        `"${(item.content || item.preview || '').replace(/"/g, '""')}"`,
+        item.category || 'text',
+        item.url || '-'
+      ]);
+      content = '\uFEFF' + [headers.join(';'), ...rows.map(r => r.join(';'))].join('\n');
+      mimeType = 'text/csv;charset=utf-8';
+      extension = 'csv';
+    }
+
+    // Utiliser File System Access API si disponible pour choisir l'emplacement
+    await saveFile(content, `selection_${selectedItems.size}_items.${extension}`, mimeType);
+  };
+
+  // Fonction pour sauvegarder avec choix d'emplacement
+  const saveFile = async (content, defaultName, mimeType) => {
+    const blob = new Blob([content], { type: mimeType });
     
-    switch(format.toLowerCase()) {
-      case 'csv':
-        content = convertToCSV(scrapingData);
-        mimeType = 'text/csv';
-        extension = 'csv';
-        break;
-      case 'json':
-      default:
-        content = JSON.stringify(scrapingData, null, 2);
-        mimeType = 'application/json';
-        extension = 'json';
-        break;
+    // Essayer d'utiliser File System Access API (Chrome/Edge moderne)
+    if ('showSaveFilePicker' in window) {
+      try {
+        const extension = defaultName.split('.').pop();
+        const handle = await window.showSaveFilePicker({
+          suggestedName: defaultName,
+          types: [{
+            description: extension.toUpperCase() + ' File',
+            accept: { [mimeType]: ['.' + extension] }
+          }]
+        });
+        const writable = await handle.createWritable();
+        await writable.write(blob);
+        await writable.close();
+        return;
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          console.warn('File System Access API failed, falling back to download:', err);
+        } else {
+          return; // User cancelled
+        }
+      }
     }
     
-    const blob = new Blob([content], { type: mimeType });
-    const url = URL.createObjectURL(blob);
+    // Fallback: téléchargement classique
+    const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `scraping-results-${Date.now()}.${extension}`;
+    a.download = defaultName;
     document.body.appendChild(a);
     a.click();
+    window.URL.revokeObjectURL(url);
     document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    
-    setExportModal(false);
   };
 
-  const convertToCSV = (data) => {
-    if (!data.data || data.data.length === 0) return '';
-    
-    const headers = Object.keys(data.data[0]).join(',');
-    const rows = data.data.map(item => 
-      Object.values(item).map(val => 
-        typeof val === 'object' ? JSON.stringify(val).replace(/"/g, '""') : 
-        val ? String(val).replace(/"/g, '""') : ''
-      ).join(',')
-    );
-    
-    return [headers, ...rows].join('\n');
-  };
+  // Générer un PDF avec les données
+  const generatePDF = async (data, filename) => {
+    // Organiser les données par catégorie pour un rapport structuré
+    const categoryIcons = {
+      'main_headings': '📌',
+      'section_headings': '📑',
+      'sub_headings': '📎',
+      'paragraphs': '📝',
+      'links': '🔗',
+      'buttons': '🔘',
+      'lists': '📋',
+      'navigation': '🧭',
+      'footer': '📄',
+      'code': '💻',
+      'other': '📦',
+      'images': '🖼️',
+      'image': '🖼️',
+      'videos': '🎬',
+      'video': '🎬',
+      'audios': '🎵',
+      'documents': '📄',
+      'text': '📝'
+    };
 
-  return (
-    <div className="dashboard-container">
-      <Sidebar />
+    const categoryNames = {
+      'main_headings': 'Titres Principaux',
+      'section_headings': 'Titres de Section',
+      'sub_headings': 'Sous-titres',
+      'paragraphs': 'Paragraphes',
+      'links': 'Liens',
+      'buttons': 'Boutons',
+      'lists': 'Listes',
+      'navigation': 'Navigation',
+      'footer': 'Pied de page',
+      'code': 'Code',
+      'other': 'Autres contenus',
+      'images': 'Images',
+      'image': 'Images',
+      'videos': 'Vidéos',
+      'video': 'Vidéos',
+      'audios': 'Audio',
+      'documents': 'Documents',
+      'text': 'Texte'
+    };
 
-      <main className="main-content">
-        <header className="top-bar">
-          {/* <div className="breadcrumb">
-            <Link to="/tasks">Tâches</Link> / 
-            <Link to="/analysis">Configuration</Link> / 
-            <span>{scrapingData.metadata.projectName}</span>
-          </div> */}
-          <div className="breadcrumb">
-          <Link to="/dashboard">Tableau de Bord</Link> / 
-          <Link to="/analysis">Analyse</Link> / 
-          <span>
-            {scrapingData.metadata.projectName || 'Chargement...'}
-            <small style={{ marginLeft: '10px', color: '#666' }}>
-              ({scrapingData.metadata.selectedElements?.length || 0} éléments)
-            </small>
-          </span>
+    // Générer le HTML pour les images
+    const generateImageGrid = (item) => {
+      if (!item.isImage || !item.elements || item.elements.length === 0) return '';
+      
+      // Utiliser TOUS les éléments (pas de limite)
+      return `
+        <div class="image-grid">
+          ${item.elements.map(img => `
+            <div class="image-card">
+              <img src="${img.src}" alt="${img.alt || 'Image'}" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+              <div class="image-error" style="display:none;">❌ Image non chargée</div>
+              <div class="image-caption">${img.alt || img.title || img.src?.split('/').pop()?.substring(0, 30) || 'Image'}</div>
+            </div>
+          `).join('')}
         </div>
-          <div className="top-bar-actions">
-            <Link to="/analysis" className="btn btn-primary">
-              <i className="fas fa-chart-line"></i>
-              Voir l'Analyse
-            </Link>
-            <button className="btn btn-secondary" onClick={() => setExportModal(true)}>
-              <i className="fas fa-file-export"></i>
-              Exporter
+      `;
+    };
+
+    // Générer le HTML pour les liens
+    const generateLinksList = (item) => {
+      if (!item.isLink || !item.elements || item.elements.length === 0) return '';
+      
+      // Utiliser TOUS les éléments (pas de limite)
+      return `
+        <div class="links-list">
+          ${item.elements.map(link => `
+            <div class="link-item">
+              <span class="link-icon">🔗</span>
+              <a href="${link.href || link.src || '#'}" target="_blank">${link.title || link.text || link.href || 'Lien'}</a>
+              ${link.href ? `<span class="link-url">${link.href}</span>` : ''}
+            </div>
+          `).join('')}
+        </div>
+      `;
+    };
+
+    // Générer le contenu pour les éléments groupés (texte)
+    const generateGroupedContent = (item) => {
+      if (!item.isGrouped || !item.elements || item.elements.length === 0) return '';
+      if (item.isImage || item.isLink) return '';
+      
+      // Utiliser TOUS les éléments (pas de limite)
+      return `
+        <ul class="content-list">
+          ${item.elements.map(el => `
+            <li>${typeof el === 'string' ? el : (el.text || el.title || JSON.stringify(el))}</li>
+          `).join('')}
+        </ul>
+      `;
+    };
+
+    // Créer le contenu HTML pour le PDF
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html lang="fr">
+      <head>
+        <meta charset="UTF-8">
+        <title>Rapport de Scraping - ${filename}</title>
+        <style>
+          * { box-sizing: border-box; }
+          body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            padding: 40px; 
+            color: #333; 
+            line-height: 1.6;
+            max-width: 1000px;
+            margin: 0 auto;
+            background: #fff;
+          }
+          
+          /* En-tête du rapport */
+          .report-header {
+            background: linear-gradient(135deg, #FF4D00 0%, #CC3D00 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 12px;
+            margin-bottom: 30px;
+          }
+          .report-header h1 {
+            margin: 0 0 20px 0;
+            font-size: 2em;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+          }
+          .report-meta {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            background: rgba(255,255,255,0.15);
+            padding: 15px 20px;
+            border-radius: 8px;
+          }
+          .report-meta-item {
+            display: flex;
+            gap: 8px;
+          }
+          .report-meta-label {
+            opacity: 0.85;
+          }
+          .report-meta-value {
+            font-weight: 600;
+          }
+          
+          /* Section de résumé */
+          .summary-section {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 30px;
+          }
+          .summary-section h2 {
+            color: #495057;
+            margin: 0 0 15px 0;
+            font-size: 1.3em;
+          }
+          .summary-stats {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+          }
+          .stat-badge {
+            background: white;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 10px 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+          }
+          .stat-icon { font-size: 1.3em; }
+          .stat-count { font-weight: 700; color: #FF4D00; }
+          .stat-label { color: #6c757d; font-size: 0.9em; }
+          
+          /* Catégories de contenu */
+          .category-section {
+            margin-bottom: 35px;
+            page-break-inside: avoid;
+          }
+          .category-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #FF4D00;
+          }
+          .category-icon { font-size: 1.5em; }
+          .category-title { 
+            font-size: 1.4em; 
+            color: #333; 
+            margin: 0;
+            font-weight: 600;
+          }
+          .category-count {
+            background: #FF4D00;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 600;
+          }
+          
+          /* Contenu des items */
+          .content-box {
+            background: #fafafa;
+            border: 1px solid #eee;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 10px;
+          }
+          .content-preview {
+            color: #555;
+            font-size: 0.95em;
+            margin-bottom: 15px;
+            padding: 12px;
+            background: white;
+            border-left: 4px solid #FF4D00;
+            border-radius: 0 6px 6px 0;
+          }
+          
+          /* Liste de contenu */
+          .content-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+          }
+          .content-list li {
+            padding: 10px 15px;
+            background: white;
+            border: 1px solid #eee;
+            margin-bottom: 8px;
+            border-radius: 6px;
+            font-size: 0.95em;
+          }
+          .content-list li:hover {
+            border-color: #FF4D00;
+          }
+          
+          /* Grille d'images */
+          .image-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin-top: 15px;
+          }
+          .image-card {
+            background: white;
+            border: 1px solid #eee;
+            border-radius: 8px;
+            overflow: hidden;
+            text-align: center;
+          }
+          .image-card img {
+            width: 100%;
+            height: 120px;
+            object-fit: cover;
+            display: block;
+          }
+          .image-error {
+            height: 120px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #f5f5f5;
+            color: #999;
+          }
+          .image-caption {
+            padding: 8px;
+            font-size: 0.8em;
+            color: #666;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            background: #fafafa;
+          }
+          
+          /* Liste de liens */
+          .links-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-top: 15px;
+          }
+          .link-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 15px;
+            background: white;
+            border: 1px solid #eee;
+            border-radius: 6px;
+          }
+          .link-icon { font-size: 1.1em; }
+          .link-item a {
+            color: #FF4D00;
+            text-decoration: none;
+            font-weight: 500;
+          }
+          .link-url {
+            color: #999;
+            font-size: 0.8em;
+            margin-left: auto;
+            max-width: 300px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+          }
+          
+          /* Plus d'éléments */
+          .more-items {
+            color: #888;
+            font-style: italic;
+            text-align: center;
+            padding: 10px;
+            margin: 10px 0 0 0;
+          }
+          
+          /* Pied de page du rapport */
+          .report-footer {
+            margin-top: 50px;
+            padding-top: 20px;
+            border-top: 2px solid #eee;
+            text-align: center;
+            color: #888;
+            font-size: 0.9em;
+          }
+          .report-footer strong {
+            color: #FF4D00;
+          }
+          
+          /* Print styles */
+          @media print {
+            body { padding: 20px; }
+            .category-section { page-break-inside: avoid; }
+            .image-grid { grid-template-columns: repeat(3, 1fr); }
+          }
+        </style>
+      </head>
+      <body>
+        <!-- En-tête du rapport -->
+        <div class="report-header">
+          <h1>📊 Rapport de Scraping</h1>
+          <div class="report-meta">
+            <div class="report-meta-item">
+              <span class="report-meta-label">Session:</span>
+              <span class="report-meta-value">#${sessionId}</span>
+            </div>
+            <div class="report-meta-item">
+              <span class="report-meta-label">Date:</span>
+              <span class="report-meta-value">${new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+            </div>
+            <div class="report-meta-item">
+              <span class="report-meta-label">URL:</span>
+              <span class="report-meta-value">${sessionInfo?.url || 'N/A'}</span>
+            </div>
+            <div class="report-meta-item">
+              <span class="report-meta-label">Éléments:</span>
+              <span class="report-meta-value">${data.length} catégories</span>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Résumé statistique -->
+        <div class="summary-section">
+          <h2>📈 Résumé de l'extraction</h2>
+          <div class="summary-stats">
+            ${data.map(item => `
+              <div class="stat-badge">
+                <span class="stat-icon">${categoryIcons[item.category] || '📦'}</span>
+                <span class="stat-count">${item.nbElements || 1}</span>
+                <span class="stat-label">${categoryNames[item.category] || item.category || 'Contenu'}</span>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+        
+        <!-- Contenu par catégorie -->
+        <h2 style="color: #333; margin-bottom: 25px;">📋 Données Extraites</h2>
+        
+        ${data.map((item, idx) => `
+          <div class="category-section">
+            <div class="category-header">
+              <span class="category-icon">${categoryIcons[item.category] || '📦'}</span>
+              <h3 class="category-title">${categoryNames[item.category] || item.title || 'Contenu'}</h3>
+              ${item.nbElements > 1 ? `<span class="category-count">${item.nbElements} éléments</span>` : ''}
+            </div>
+            
+            <div class="content-box">
+              ${item.preview ? `
+                <div class="content-preview">
+                  ${item.preview.substring(0, 300)}${item.preview.length > 300 ? '...' : ''}
+                </div>
+              ` : ''}
+              
+              ${item.isImage ? generateImageGrid(item) : ''}
+              ${item.isLink ? generateLinksList(item) : ''}
+              ${!item.isImage && !item.isLink && item.isGrouped ? generateGroupedContent(item) : ''}
+              ${!item.isGrouped && item.content ? `<p style="color: #555;">${item.content}</p>` : ''}
+            </div>
+          </div>
+        `).join('')}
+        
+        <!-- Pied de page -->
+        <div class="report-footer">
+          <p>Généré par <strong>Scraper Pro</strong> — ${new Date().toLocaleString('fr-FR')}</p>
+          <p>🌐 ${sessionInfo?.url || ''}</p>
+        </div>
+      </body>
+      </html>
+    `;
+    
+    // Ouvrir dans une nouvelle fenêtre pour impression/PDF
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
+    
+    // Attendre le chargement des images puis déclencher l'impression
+    printWindow.onload = () => {
+      // Petit délai pour laisser les images se charger
+      setTimeout(() => {
+        printWindow.print();
+      }, 1000);
+    };
+  };
+
+  // Ouvrir la prévisualisation
+  const openPreview = (item) => {
+    setPreviewItem(item);
+    setShowPreview(true);
+  };
+
+  const handleExport = async (format) => {
+    if (!sessionId) {
+      alert('Aucune session active pour l\'export');
+      return;
+    }
+    
+    // Ouvrir le modal de sélection au lieu d'exporter directement
+    setExportModalFormat(format);
+    setExportLimit(Math.min(results.length, 100)); // Par défaut 100 ou moins si moins de résultats
+    setExportSelectedOnly(selectedItems.size > 0); // Si des items sont sélectionnés, activer par défaut
+    setShowExportModal(true);
+  };
+  
+  // Fonction d'export confirmée après sélection
+  const handleConfirmExport = async () => {
+    const format = exportModalFormat;
+    if (!sessionId || !format) return;
+    
+    setShowExportModal(false);
+    
+    // Pour PDF, générer localement
+    if (format.toLowerCase() === 'pdf') {
+      setExportingFormat('pdf');
+      try {
+        // Filtrer les résultats selon la sélection
+        const dataToExport = getFilteredDataForExport();
+        await generatePDF(dataToExport, `scraping_session_${sessionId}`);
+      } finally {
+        setExportingFormat(null);
+      }
+      return;
+    }
+    
+    // Définir l'état de chargement
+    setExportingFormat(format.toLowerCase());
+    
+    try {
+      // Préparer les IDs des éléments à exporter
+      const itemsToExport = getFilteredDataForExport().map(item => item.id);
+      
+      const blob = await api.exportResults(sessionId, format.toLowerCase(), {
+        item_ids: itemsToExport.length < results.length ? itemsToExport : null,
+        limit: exportLimit
+      });
+      
+      // Déterminer l'extension du fichier
+      let extension = format.toLowerCase();
+      if (format.toLowerCase() === 'zip_images') {
+        extension = 'zip';
+      }
+      
+      // Créer un lien de téléchargement
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `results_${sessionId}.${extension}`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      
+    } catch (error) {
+      console.error('Erreur lors de l\'export:', error);
+      alert(`Erreur lors de l'export ${format}: ${error.message || 'Erreur inconnue'}`);
+    } finally {
+      setExportingFormat(null);
+    }
+  };
+  
+  // Obtenir les données filtrées pour l'export
+  const getFilteredDataForExport = () => {
+    if (exportSelectedOnly && selectedItems.size > 0) {
+      // Exporter uniquement les items sélectionnés
+      return results.filter(item => selectedItems.has(item.id));
+    } else {
+      // Exporter selon la limite
+      return results.slice(0, exportLimit);
+    }
+  };
+
+  // Re-scraper le site avec la même configuration
+  const handleRescrape = async () => {
+    if (!sessionId) {
+      alert('Aucune session à re-scraper');
+      return;
+    }
+    
+    if (!confirm('Voulez-vous relancer le scraping de ce site avec la même configuration ?')) {
+      return;
+    }
+    
+    try {
+      const response = await api.rescrape(sessionId);
+      
+      if (response.new_session_id) {
+        alert(`Nouveau scraping lancé ! Session #${response.new_session_id}`);
+        // Rediriger vers la nouvelle session
+        navigate(`/results?session=${response.new_session_id}`);
+      }
+    } catch (error) {
+      console.error('Erreur lors du re-scraping:', error);
+      alert(`Erreur: ${error.message || 'Impossible de relancer le scraping'}`);
+    }
+  };
+  return (
+    <div className="app-container">
+      {/* Sidebar - SEULEMENT le logo */}
+      <aside className="sidebar">
+        <div className="logo" onClick={() => navigate('/dashboard')} style={{ cursor: 'pointer' }}>
+          <div className="logo-icon">⚡</div>
+          SCRAPER PRO
+        </div>
+      </aside>
+
+      {/* Main Content */}
+      <main className="main-content">
+        {/* Header */}
+        <header className="page-header">
+          <div>
+            <h1 className="page-title">Résultats du scraping</h1>
+            <p className="session-id">Session #{sessionId || 'SCR-2026-001247'}</p>
+          </div>
+          <div className="session-info">
+            <div className="info-item">
+              <span className="info-label">Statut</span>
+              <span className={`status-badge status-${sessionInfo?.status || 'success'}`}>
+                {sessionInfo?.status === 'completed' ? '✓ Terminé' : 
+                 sessionInfo?.status === 'running' ? '⏳ En cours' : 
+                 sessionInfo?.status === 'error' ? '✕ Erreur' : '✓ Terminé'}
+              </span>
+            </div>
+            <div className="info-item">
+              <span className="info-label">Date</span>
+              <span className="info-value">{sessionInfo?.date || '02/02/2026'}</span>
+            </div>
+            <div className="info-item">
+              <span className="info-label">Éléments</span>
+              <span className="info-value">{sessionInfo?.items || results.length || '0'}</span>
+            </div>
+            <button 
+              className="btn-rescrape"
+              onClick={handleRescrape}
+              title="Lancer un nouveau scraping avec la même configuration"
+            >
+              <span>🔄</span>
+              Re-scraper
             </button>
           </div>
         </header>
 
-        <div className="results-container">
-          <div className="results-header">
-            <h2>
-              <i className="fas fa-database"></i> 
-              Résultats de Scraping: {scrapingData.metadata.projectName}
-            </h2>
-            <p>
-              {scrapingData.statistics.elementsCount.toLocaleString()} éléments extraits
-              {scrapingData.metadata.url && ` depuis ${scrapingData.metadata.url}`}
-              {scrapingData.metadata.selector && ` avec le sélecteur ${scrapingData.metadata.selector}`}
+        {/* Controls Bar */}
+        <div className="controls-bar">
+          <div className="search-box">
+            <span className="search-icon">🔍</span>
+            <input
+              type="text"
+              className="search-input"
+              placeholder="Rechercher dans les résultats..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+
+          <div className="filter-group">
+            <button
+              className={`filter-btn ${activeFilter === 'all' ? 'active' : ''}`}
+              onClick={() => setActiveFilter('all')}
+            >
+              <span>📦</span>
+              Tous
+            </button>
+            <button
+              className={`filter-btn ${activeFilter === 'new' ? 'active' : ''}`}
+              onClick={() => setActiveFilter('new')}
+            >
+              <span>⚡</span>
+              En stock
+            </button>
+            <button
+              className={`filter-btn ${activeFilter === 'errors' ? 'active' : ''}`}
+              onClick={() => setActiveFilter('errors')}
+            >
+              <span>⚠️</span>
+              Erreurs
+            </button>
+          </div>
+
+          <div className="export-group">
+            <button 
+              className={`export-btn ${exportingFormat === 'csv' ? 'exporting' : ''}`} 
+              onClick={() => handleExport('CSV')}
+              disabled={exportingFormat !== null}
+            >
+              <span>{exportingFormat === 'csv' ? '⏳' : '📄'}</span>
+              {exportingFormat === 'csv' ? 'Export...' : 'CSV'}
+            </button>
+            <button 
+              className={`export-btn ${exportingFormat === 'excel' ? 'exporting' : ''}`} 
+              onClick={() => handleExport('Excel')}
+              disabled={exportingFormat !== null}
+            >
+              <span>{exportingFormat === 'excel' ? '⏳' : '📊'}</span>
+              {exportingFormat === 'excel' ? 'Export...' : 'Excel'}
+            </button>
+            <button 
+              className={`export-btn ${exportingFormat === 'json' ? 'exporting' : ''}`} 
+              onClick={() => handleExport('JSON')}
+              disabled={exportingFormat !== null}
+            >
+              <span>{exportingFormat === 'json' ? '⏳' : '🔧'}</span>
+              {exportingFormat === 'json' ? 'Export...' : 'JSON'}
+            </button>
+            <button 
+              className={`export-btn export-btn-pdf ${exportingFormat === 'pdf' ? 'exporting' : ''}`} 
+              onClick={() => handleExport('PDF')}
+              disabled={exportingFormat !== null}
+            >
+              <span>{exportingFormat === 'pdf' ? '⏳' : '📕'}</span>
+              {exportingFormat === 'pdf' ? 'Export...' : 'PDF'}
+            </button>
+            <button 
+              className={`export-btn ${exportingFormat === 'xml' ? 'exporting' : ''}`} 
+              onClick={() => handleExport('XML')}
+              disabled={exportingFormat !== null}
+            >
+              <span>{exportingFormat === 'xml' ? '⏳' : '📋'}</span>
+              {exportingFormat === 'xml' ? 'Export...' : 'XML'}
+            </button>
+            <button 
+              className={`export-btn ${includeImagesZip ? 'export-btn-highlight' : ''} ${exportingFormat === 'zip_images' ? 'exporting' : ''}`} 
+              onClick={() => handleExport('ZIP_IMAGES')}
+              disabled={exportingFormat !== null}
+              title={exportingFormat === 'zip_images' ? 'Téléchargement des images en cours...' : (includeImagesZip ? 'Option sélectionnée depuis la configuration' : 'Télécharger les images en ZIP')}
+            >
+              <span>{exportingFormat === 'zip_images' ? '⏳' : '🖼️'}</span>
+              {exportingFormat === 'zip_images' ? 'Téléchargement...' : 'ZIP Images'}
+              {includeImagesZip && !exportingFormat && <span className="highlight-badge">★</span>}
+            </button>
+          </div>
+        </div>
+
+        {/* Barre de sélection - visible quand des éléments sont sélectionnés */}
+        {selectedItems.size > 0 && (
+          <div className="selection-bar">
+            <div className="selection-info">
+              <span className="selection-count">✓ {selectedItems.size} élément(s) sélectionné(s)</span>
+              <button className="clear-selection-btn" onClick={() => { setSelectedItems(new Set()); setSelectAll(false); }}>
+                ✕ Désélectionner
+              </button>
+            </div>
+            <div className="selection-actions">
+              <span className="export-label">Exporter la sélection :</span>
+              <button className="export-selection-btn" onClick={() => handleExportSelected('csv')}>
+                📄 CSV
+              </button>
+              <button className="export-selection-btn" onClick={() => handleExportSelected('excel')}>
+                📊 Excel
+              </button>
+              <button className="export-selection-btn" onClick={() => handleExportSelected('json')}>
+                🔧 JSON
+              </button>
+              <button className="export-selection-btn export-btn-pdf" onClick={() => handleExportSelected('pdf')}>
+                📕 PDF
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Loading/Error States */}
+        {isLoading && (
+          <div className="card" style={{padding: '3rem', textAlign: 'center'}}>
+            <div style={{fontSize: '2rem', marginBottom: '1rem'}}>⏳</div>
+            <h3>Chargement des résultats...</h3>
+            <p style={{color: 'var(--text-muted)', marginTop: '0.5rem'}}>Veuillez patienter</p>
+          </div>
+        )}
+        
+        {/* État sans session */}
+        {!isLoading && !sessionId && (
+          <div className="empty-state-container">
+            <div className="empty-state-icon">📂</div>
+            <h2 className="empty-state-title">Aucune session de scraping</h2>
+            <p className="empty-state-text">
+              Vous n'avez pas de session de scraping active. Lancez une nouvelle analyse pour voir les résultats ici.
             </p>
-            
-            <div className="selected-elements-summary">
-              <h4>Éléments sélectionnés :</h4>
-              <div className="elements-tags">
-                {scrapingData.metadata.selectedElements.map((element, index) => (
-                  <span key={index} className="element-tag">
-                    <i className={element.icon || "fas fa-check"}></i>
-                    {element.name} ({element.count} éléments)
-                    <span className="confidence-badge">{element.confidence}%</span>
-                  </span>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="results-controls">
-            <div className="search-box">
-              <i className="fas fa-search"></i>
-              <input 
-                type="text" 
-                placeholder="Rechercher dans les résultats..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-
-            <div className="control-buttons">
-              <button className="btn btn-secondary">
-                <i className="fas fa-filter"></i>
-                Filtrer
+            <div className="empty-state-actions">
+              <button className="empty-state-btn primary" onClick={() => navigate('/analysis')}>
+                🔍 Lancer une analyse
               </button>
-              <button className="btn btn-secondary" onClick={() => window.location.reload()}>
-                <i className="fas fa-sync"></i>
-                Actualiser
+              <button className="empty-state-btn secondary" onClick={() => navigate('/dashboard')}>
+                📊 Aller au Dashboard
               </button>
             </div>
           </div>
-
-          <div className="results-stats">
-            <div className="stat-card">
-              <div className="stat-icon">
-                <i className="fas fa-database"></i>
-              </div>
-              <div className="stat-info">
-                <h4>Volume total</h4>
-                <p className="stat-number">{scrapingData.statistics.totalVolume}</p>
-              </div>
+        )}
+        
+        {/* État session trouvée mais pas de données */}
+        {!isLoading && !error && sessionId && results.length === 0 && (
+          <div className="empty-state-container">
+            <div className="empty-state-icon">📭</div>
+            <h2 className="empty-state-title">Aucune donnée extraite</h2>
+            <p className="empty-state-text">
+              La session #{sessionId} existe mais ne contient pas de données.
+              {sessionInfo?.status === 'in_progress' && (
+                <><br/><strong>Le scraping est peut-être encore en cours...</strong></>
+              )}
+            </p>
+            <div className="empty-state-actions">
+              <button className="empty-state-btn secondary" onClick={() => window.location.reload()}>
+                🔄 Rafraîchir
+              </button>
+              <button className="empty-state-btn primary" onClick={() => navigate('/analysis')}>
+                🔍 Nouvelle analyse
+              </button>
+              <button className="empty-state-btn secondary" onClick={() => navigate('/dashboard')}>
+                📊 Dashboard
+              </button>
             </div>
-
-            <div className="stat-card">
-              <div className="stat-icon">
-                <i className="fas fa-check-circle"></i>
-              </div>
-              <div className="stat-info">
-                <h4>Taux de réussite</h4>
-                <p className="stat-number">{scrapingData.statistics.successRate}</p>
-              </div>
-            </div>
-
-            <div className="stat-card">
-              <div className="stat-icon">
-                <i className="fas fa-clock"></i>
-              </div>
-              <div className="stat-info">
-                <h4>Temps d'extraction</h4>
-                <p className="stat-number">{scrapingData.statistics.avgExtractionTime}</p>
-              </div>
-            </div>
-
-            <div className="stat-card">
-              <div className="stat-icon">
-                <i className="fas fa-box"></i>
-              </div>
-              <div className="stat-info">
-                <h4>Éléments extraits</h4>
-                <p className="stat-number">{scrapingData.statistics.elementsCount.toLocaleString()}</p>
+          </div>
+        )}
+        
+        {error && (
+          <div className="error-alert">
+            <div className="error-icon">⚠️</div>
+            <div className="error-content">
+              <h4>Erreur de chargement</h4>
+              <p>{error}</p>
+              <div className="error-actions">
+                <button className="error-btn" onClick={() => navigate('/dashboard')}>
+                  📊 Retour au Dashboard
+                </button>
               </div>
             </div>
           </div>
+        )}
+        
+        {/* Data Table */}
+        {!isLoading && !error && sessionId && results.length > 0 && (
+        <div className="table-container">
+          {/* Dossier du site scrapé */}
+          <div className="folder-header">
+            <div className="folder-icon">📁</div>
+            <div className="folder-info">
+              <h3 className="folder-name">{sessionInfo?.url ? new URL(sessionInfo.url).hostname : 'Site scrapé'}</h3>
+              <span className="folder-url">{sessionInfo?.url || ''}</span>
+            </div>
+            <div className="folder-stats">
+              <span className="folder-stat">
+                <span className="stat-value">{filteredProducts.length}</span>
+                <span className="stat-label">catégories</span>
+              </span>
+              <span className="folder-stat">
+                <span className="stat-value">{filteredProducts.reduce((acc, item) => acc + (item.nbElements || 1), 0)}</span>
+                <span className="stat-label">éléments</span>
+              </span>
+            </div>
+          </div>
+          
+          <div className="folder-content">
+            <div className="table-header">
+              <h4 className="table-title">📂 Contenu du dossier</h4>
+              <span className="table-count">
+                Affichage {startIndex + 1}-{Math.min(startIndex + itemsPerPage, filteredProducts.length)} sur {filteredProducts.length} éléments
+              </span>
+            </div>
 
-          <div className="results-table-container">
-            <table className="results-table">
-              <thead>
-                <tr>
-                  {renderTableHeaders()}
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th style={{ width: '50px' }}>
+                  <input 
+                    type="checkbox" 
+                    className="select-checkbox"
+                    checked={paginatedProducts.length > 0 && paginatedProducts.every(item => selectedItems.has(item.id))}
+                    onChange={handleSelectPage}
+                    title="Sélectionner cette page"
+                  />
+                </th>
+                <th style={{ width: '50px' }}>#</th>
+                <th>Aperçu</th>
+                <th>Contenu</th>
+                <th>Type</th>
+                <th style={{ width: '100px' }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {paginatedProducts.map((item) => (
+                <tr key={item.id} className={selectedItems.has(item.id) ? 'row-selected' : ''}>
+                  <td>
+                    <input 
+                      type="checkbox" 
+                      className="select-checkbox"
+                      checked={selectedItems.has(item.id)}
+                      onChange={() => handleSelectItem(item.id)}
+                    />
+                  </td>
+                  <td>{item.id}</td>
+                  <td>
+                    {/* Aperçu visuel selon le type */}
+                    <div className="cell-preview">
+                      {item.isImage && item.imageSrc ? (
+                        <img src={item.imageSrc} alt={item.title} className="preview-thumbnail" onError={(e) => e.target.style.display='none'} />
+                      ) : item.isImage ? (
+                        <div className="preview-icon" style={{ background: getCategoryConfig('images').color + '20', color: getCategoryConfig('images').color }}>🖼️</div>
+                      ) : item.isVideo ? (
+                        <div className="preview-icon" style={{ background: getCategoryConfig('videos').color + '20', color: getCategoryConfig('videos').color }}>🎬</div>
+                      ) : item.isLink ? (
+                        <div className="preview-icon" style={{ background: getCategoryConfig('links').color + '20', color: getCategoryConfig('links').color }}>🔗</div>
+                      ) : (
+                        <div className="preview-icon" style={{ background: getCategoryConfig(item.category).color + '20' }}>
+                          {getCategoryConfig(item.category).icon}
+                        </div>
+                      )}
+                      {item.nbElements > 1 && (
+                        <span className="element-count">{item.nbElements}</span>
+                      )}
+                    </div>
+                  </td>
+                  <td>
+                    <div className="cell-content-wrapper">
+                      <div className="cell-title-main">
+                        {getCategoryConfig(item.category).icon} {getCategoryConfig(item.category).name}
+                        {item.nbElements > 1 && <span className="title-count">({item.nbElements})</span>}
+                      </div>
+                      <div className="cell-preview-text">{item.preview?.substring(0, 80) || '-'}</div>
+                    </div>
+                  </td>
+                  <td>
+                    <span 
+                      className="type-badge" 
+                      style={{ 
+                        background: getCategoryConfig(item.category).color + '20',
+                        color: getCategoryConfig(item.category).color,
+                        borderColor: getCategoryConfig(item.category).color + '40'
+                      }}
+                    >
+                      {getCategoryConfig(item.category).icon} {getCategoryConfig(item.category).name}
+                    </span>
+                  </td>
+                  <td>
+                    <div className="action-buttons">
+                      <button className="action-btn preview-btn" onClick={() => openPreview(item)} title="Prévisualiser">
+                        👁️
+                      </button>
+                      {item.isMediaGroup && item.elements?.length > 0 && (
+                        <span className="elements-badge">{item.nbElements}</span>
+                      )}
+                    </div>
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {paginatedData.map(item => renderTableRow(item))}
-              </tbody>
-            </table>
+              ))}
+            </tbody>
+          </table>
 
-            {paginatedData.length === 0 && (
-              <div className="no-results">
-                <i className="fas fa-search"></i>
-                <h3>Aucun résultat trouvé</h3>
-                <p>
-                  {scrapingData.metadata.selectedElements.length === 0 
-                    ? 'Commencez par analyser et sélectionner des éléments à scraper.' 
-                    : 'Essayez de modifier vos critères de recherche.'}
-                </p>
-                {scrapingData.metadata.selectedElements.length === 0 && (
-                  <Link to="/analysis" className="btn btn-primary">
-                    <i className="fas fa-arrow-right"></i>
-                    Aller à l'Analyse
-                  </Link>
+          {/* Pagination */}
+          <div className="pagination">
+            <div className="pagination-info">
+              Affichage {startIndex + 1}-{Math.min(startIndex + itemsPerPage, filteredProducts.length)} sur {filteredProducts.length} éléments
+            </div>
+            <div className="pagination-controls">
+              <button
+                className="page-btn"
+                onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                disabled={currentPage === 1}
+              >
+                ◀
+              </button>
+              {[...Array(Math.min(5, totalPages))].map((_, idx) => {
+                const pageNum = idx + 1;
+                return (
+                  <button
+                    key={pageNum}
+                    className={`page-btn ${currentPage === pageNum ? 'active' : ''}`}
+                    onClick={() => setCurrentPage(pageNum)}
+                  >
+                    {pageNum}
+                  </button>
+                );
+              })}
+              {totalPages > 5 && (
+                <>
+                  <button className="page-btn">...</button>
+                  <button
+                    className="page-btn"
+                    onClick={() => setCurrentPage(totalPages)}
+                  >
+                    {totalPages}
+                  </button>
+                </>
+              )}
+              <button
+                className="page-btn"
+                onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                disabled={currentPage === totalPages}
+              >
+                ▶
+              </button>
+            </div>
+          </div>
+          </div>
+        </div>
+        )}
+
+        {/* Modal de prévisualisation */}
+        {showPreview && previewItem && (
+          <div className="preview-modal-overlay" onClick={() => setShowPreview(false)}>
+            <div className="preview-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="preview-modal-header">
+                <h3>{previewItem.title || 'Prévisualisation'}</h3>
+                <button className="preview-close-btn" onClick={() => setShowPreview(false)}>✕</button>
+              </div>
+              
+              <div className="preview-modal-body">
+                {/* Info groupement */}
+                {previewItem.isGrouped && (
+                  <div className="preview-group-info">
+                    <span className="group-badge">📦 {previewItem.nbElements} éléments groupés</span>
+                  </div>
+                )}
+
+                {/* Contenu principal */}
+                <div className="preview-content-section">
+                  {/* Galerie d'images groupées */}
+                  {previewItem.isImage && previewItem.isGrouped && previewItem.elements?.length > 0 ? (
+                    <div className="preview-gallery">
+                      <h4>🖼️ Images ({previewItem.elements.length})</h4>
+                      <div className="gallery-grid">
+                        {previewItem.elements.slice(0, 12).map((img, idx) => (
+                          <div key={idx} className="gallery-item">
+                            <img src={img.src} alt={img.alt || `Image ${idx+1}`} onError={(e) => e.target.style.display='none'} />
+                            <span className="gallery-alt">{img.alt || img.src.split('/').pop()}</span>
+                          </div>
+                        ))}
+                      </div>
+                      {previewItem.elements.length > 12 && (
+                        <p className="gallery-more">+ {previewItem.elements.length - 12} autres images</p>
+                      )}
+                    </div>
+                  ) : previewItem.isVideo ? (
+                    <div className="preview-video-container">
+                      {previewItem.elements?.length > 0 ? (
+                        previewItem.elements.slice(0, 4).map((vid, idx) => (
+                          <div key={idx} className="video-item">
+                            <video controls className="preview-video-full">
+                              <source src={vid.src} />
+                            </video>
+                            <p className="preview-url">{vid.src}</p>
+                          </div>
+                        ))
+                      ) : previewItem.videoSrc ? (
+                        <video controls className="preview-video-full">
+                          <source src={previewItem.videoSrc} />
+                        </video>
+                      ) : null}
+                    </div>
+                  ) : previewItem.isGrouped && previewItem.elements?.length > 0 ? (
+                    /* Liste de contenus groupés */
+                    <div className="preview-list-container">
+                      <ul className="preview-list">
+                        {previewItem.elements.slice(0, 30).map((el, idx) => (
+                          <li key={idx} className="preview-list-item">
+                            {typeof el === 'string' ? el : (el.title || el.src || JSON.stringify(el))}
+                          </li>
+                        ))}
+                      </ul>
+                      {previewItem.elements.length > 30 && (
+                        <p className="preview-more">+ {previewItem.elements.length - 30} autres éléments</p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="preview-text-container">
+                      <p className="preview-text-full">{previewItem.content || previewItem.preview}</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Données brutes */}
+                <details className="preview-raw-data">
+                  <summary>📋 Données brutes (JSON)</summary>
+                  <pre>{JSON.stringify(previewItem.rawData, null, 2)}</pre>
+                </details>
+              </div>
+
+              <div className="preview-modal-footer">
+                <button className="preview-action-btn" onClick={() => {
+                  navigator.clipboard.writeText(previewItem.content || previewItem.preview || '');
+                  alert('Copié dans le presse-papier !');
+                }}>
+                  📋 Copier le contenu
+                </button>
+                {(previewItem.url && previewItem.url !== '-') && (
+                  <a href={previewItem.url} target="_blank" rel="noopener noreferrer" className="preview-action-btn">
+                    🔗 Ouvrir le lien
+                  </a>
                 )}
               </div>
-            )}
-
-            {paginatedData.length > 0 && (
-              <div className="pagination">
-                <div className="rows-per-page">
-                  <span>Lignes par page:</span>
-                  <select 
-                    value={rowsPerPage} 
-                    onChange={(e) => setRowsPerPage(Number(e.target.value))}
-                  >
-                    <option value={10}>10</option>
-                    <option value={25}>25</option>
-                    <option value={50}>50</option>
-                    <option value={100}>100</option>
-                  </select>
-                </div>
-
-                <div className="page-numbers">
-                  <button 
-                    className="page-btn" 
-                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                    disabled={currentPage === 1}
-                  >
-                    <i className="fas fa-chevron-left"></i>
-                  </button>
-                  
-                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                    let pageNum;
-                    if (totalPages <= 5) {
-                      pageNum = i + 1;
-                    } else if (currentPage <= 3) {
-                      pageNum = i + 1;
-                    } else if (currentPage >= totalPages - 2) {
-                      pageNum = totalPages - 4 + i;
-                    } else {
-                      pageNum = currentPage - 2 + i;
-                    }
-                    
-                    return (
-                      <button
-                        key={pageNum}
-                        className={`page-btn ${currentPage === pageNum ? 'active' : ''}`}
-                        onClick={() => setCurrentPage(pageNum)}
-                      >
-                        {pageNum}
-                      </button>
-                    );
-                  })}
-                  
-                  {totalPages > 5 && currentPage < totalPages - 2 && (
-                    <>
-                      <span>...</span>
-                      <button 
-                        className="page-btn"
-                        onClick={() => setCurrentPage(totalPages)}
-                      >
-                        {totalPages}
-                      </button>
-                    </>
-                  )}
-                  
-                  <button 
-                    className="page-btn" 
-                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                    disabled={currentPage === totalPages}
-                  >
-                    <i className="fas fa-chevron-right"></i>
-                  </button>
-                </div>
-                
-                <div className="pagination-info">
-                  Affichage de {(currentPage - 1) * rowsPerPage + 1} à {Math.min(currentPage * rowsPerPage, sortedData.length)} sur {sortedData.length} éléments
-                </div>
+            </div>
+          </div>
+        )}
+        
+        {/* Modal d'export automatique (format pré-sélectionné depuis Analysis) */}
+        {showExportPrompt && preSelectedFormat && (
+          <div className="preview-modal-overlay" onClick={() => setShowExportPrompt(false)}>
+            <div className="export-prompt-modal" onClick={e => e.stopPropagation()}>
+              <div className="export-prompt-header">
+                <h3>📦 Export des résultats</h3>
+                <button className="preview-close-btn" onClick={() => setShowExportPrompt(false)}>×</button>
               </div>
-            )}
-          </div>
-
-          <div className="export-options-card">
-            <h3><i className="fas fa-file-export"></i> Options d'Export</h3>
-            <p>Sélectionnez les formats pour exporter vos données scrappées.</p>
-
-            <div className="export-buttons">
-              <button className="export-btn" onClick={() => exportToFormat('CSV')}>
-                <i className="fas fa-file-csv"></i>
-                CSV
-              </button>
-              <button className="export-btn" onClick={() => exportToFormat('JSON')}>
-                <i className="fas fa-file-code"></i>
-                JSON
-              </button>
-              <button className="export-btn" onClick={() => exportToFormat('Excel')}>
-                <i className="fas fa-file-excel"></i>
-                Excel
-              </button>
+              <div className="export-prompt-body">
+                <p>
+                  Vous avez choisi le format <strong>{preSelectedFormat.toUpperCase()}</strong> avant le scraping.
+                </p>
+                <p>Voulez-vous exporter les {results.length} résultats maintenant ?</p>
+              </div>
+              <div className="export-prompt-actions">
+                <button 
+                  className="export-prompt-btn primary"
+                  onClick={() => {
+                    handleExport(preSelectedFormat);
+                    setShowExportPrompt(false);
+                  }}
+                >
+                  ✅ Exporter en {preSelectedFormat.toUpperCase()}
+                </button>
+                <button 
+                  className="export-prompt-btn secondary"
+                  onClick={() => setShowExportPrompt(false)}
+                >
+                  ❌ Plus tard
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      </main>
-
-      {exportModal && (
-        <div className="modal-overlay" onClick={() => setExportModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3><i className="fas fa-file-export"></i> Exporter les données</h3>
-              <button className="modal-close" onClick={() => setExportModal(false)}>
-                <i className="fas fa-times"></i>
-              </button>
-            </div>
-            <div className="modal-body">
-              <p>Exportez {scrapingData.data.length} éléments au format :</p>
+        )}
+        
+        {/* Modal de sélection pour l'export */}
+        {showExportModal && exportModalFormat && (
+          <div className="preview-modal-overlay" onClick={() => setShowExportModal(false)}>
+            <div className="export-selection-modal" onClick={e => e.stopPropagation()} style={{
+              background: 'linear-gradient(135deg, #141419, #1a1a20)',
+              border: '1px solid rgba(255, 77, 0, 0.3)',
+              borderRadius: '16px',
+              padding: '2rem',
+              maxWidth: '500px',
+              width: '90%'
+            }}>
+              <div className="export-prompt-header">
+                <h3 style={{ color: '#FF4D00', marginBottom: '0.5rem' }}>
+                  📦 Configuration de l'export {exportModalFormat.toUpperCase()}
+                </h3>
+                <button className="preview-close-btn" onClick={() => setShowExportModal(false)}>×</button>
+              </div>
               
-              <div className="export-format-options">
-                <label className="format-option">
-                  <input 
-                    type="radio" 
-                    name="exportFormat" 
-                    value="json" 
-                    checked={selectedFormat === 'json'}
-                    onChange={(e) => setSelectedFormat(e.target.value)}
-                  />
-                  <div className="format-content">
-                    <i className="fas fa-file-code"></i>
-                    <div>
-                      <strong>JSON</strong>
-                      <small>Structure hiérarchique complète</small>
-                    </div>
-                  </div>
-                </label>
+              <div style={{ marginTop: '1.5rem', color: '#A0A0B0' }}>
+                <p style={{ marginBottom: '1rem' }}>
+                  Total de résultats disponibles: <strong style={{ color: '#00E5FF' }}>{results.length}</strong>
+                </p>
                 
-                <label className="format-option">
-                  <input 
-                    type="radio" 
-                    name="exportFormat" 
-                    value="csv" 
-                    checked={selectedFormat === 'csv'}
-                    onChange={(e) => setSelectedFormat(e.target.value)}
-                  />
-                  <div className="format-content">
-                    <i className="fas fa-file-csv"></i>
-                    <div>
-                      <strong>CSV</strong>
-                      <small>Tableur compatible Excel</small>
+                {selectedItems.size > 0 && (
+                  <div style={{ 
+                    marginBottom: '1.5rem',
+                    padding: '1rem',
+                    background: 'rgba(0, 229, 255, 0.1)',
+                    border: '1px solid rgba(0, 229, 255, 0.3)',
+                    borderRadius: '8px'
+                  }}>
+                    <label style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: '0.5rem',
+                      cursor: 'pointer',
+                      color: '#00E5FF'
+                    }}>
+                      <input
+                        type="checkbox"
+                        checked={exportSelectedOnly}
+                        onChange={(e) => setExportSelectedOnly(e.target.checked)}
+                        style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                      />
+                      <span>
+                        Exporter uniquement les {selectedItems.size} élément{selectedItems.size > 1 ? 's' : ''} sélectionné{selectedItems.size > 1 ? 's' : ''}
+                      </span>
+                    </label>
+                  </div>
+                )}
+                
+                {!exportSelectedOnly && (
+                  <div style={{ marginBottom: '1.5rem' }}>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', color: '#FFFFFF' }}>
+                      Nombre d'éléments à exporter:
+                    </label>
+                    <input
+                      type="range"
+                      min="1"
+                      max={results.length}
+                      value={exportLimit}
+                      onChange={(e) => setExportLimit(parseInt(e.target.value))}
+                      style={{
+                        width: '100%',
+                        accentColor: '#FF4D00',
+                        marginBottom: '0.5rem'
+                      }}
+                    />
+                    <div style={{ 
+                      display: 'flex', 
+                      justifyContent: 'space-between',
+                      fontSize: '0.9rem'
+                    }}>
+                      <span>1</span>
+                      <span style={{ color: '#FF4D00', fontWeight: '600', fontSize: '1.1rem' }}>
+                        {exportLimit}
+                      </span>
+                      <span>{results.length}</span>
                     </div>
                   </div>
-                </label>
+                )}
+                
+                <div style={{
+                  padding: '1rem',
+                  background: 'rgba(255, 77, 0, 0.1)',
+                  border: '1px solid rgba(255, 77, 0, 0.3)',
+                  borderRadius: '8px',
+                  marginBottom: '1.5rem'
+                }}>
+                  <p style={{ margin: 0, fontSize: '0.9rem' }}>
+                    📊 {exportSelectedOnly && selectedItems.size > 0 
+                      ? `${selectedItems.size} élément${selectedItems.size > 1 ? 's' : ''} sélectionné${selectedItems.size > 1 ? 's' : ''}`
+                      : `${exportLimit} premier${exportLimit > 1 ? 's' : ''} élément${exportLimit > 1 ? 's' : ''}`
+                    } sera{(exportSelectedOnly ? selectedItems.size : exportLimit) > 1 ? 'ont' : ''} exporté{(exportSelectedOnly ? selectedItems.size : exportLimit) > 1 ? 's' : ''}.
+                  </p>
+                </div>
+              </div>
+              
+              <div className="export-prompt-actions" style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem' }}>
+                <button 
+                  className="export-prompt-btn primary"
+                  onClick={handleConfirmExport}
+                  style={{
+                    flex: 1,
+                    padding: '0.75rem',
+                    background: '#FF4D00',
+                    border: 'none',
+                    borderRadius: '8px',
+                    color: 'white',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  ✅ Exporter
+                </button>
+                <button 
+                  className="export-prompt-btn secondary"
+                  onClick={() => setShowExportModal(false)}
+                  style={{
+                    flex: 1,
+                    padding: '0.75rem',
+                    background: 'rgba(160, 160, 176, 0.2)',
+                    border: '1px solid #606070',
+                    borderRadius: '8px',
+                    color: '#A0A0B0',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  ❌ Annuler
+                </button>
               </div>
             </div>
-            <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setExportModal(false)}>
-                Annuler
-              </button>
-              <button className="btn btn-primary" onClick={() => exportToFormat(selectedFormat)}>
-                <i className="fas fa-download"></i>
-                Télécharger
-              </button>
-            </div>
           </div>
-        </div>
-      )}
+        )}
+      </main>
     </div>
   );
-};
+}
 
 export default Results;

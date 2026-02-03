@@ -1,0 +1,144 @@
+/* Location: frontend/src/components/ProgressLogs/ProgressLogs.css */
+/* Styles pour l'affichage des logs de progression en temps réel */
+/* Terminal-style logs pour suivre l'analyse */
+/* RELEVANT FILES: ProgressLogs.jsx, dashboard.css */
+
+.progress-logs-container {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-top: 2rem;
+    overflow: hidden;
+}
+
+.progress-logs-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1rem 1.5rem;
+    background: rgba(255, 77, 0, 0.05);
+    border-bottom: 1px solid var(--border);
+}
+
+.progress-logs-header .material-icons {
+    color: var(--primary);
+    font-size: 1.5rem;
+}
+
+.progress-logs-header h3 {
+    margin: 0;
+    font-size: 1.1rem;
+    flex: 1;
+}
+
+.current-step {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.current-step .material-icons {
+    font-size: 1rem;
+}
+
+.current-step .spinning {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.progress-logs-content {
+    padding: 1rem;
+    max-height: 400px;
+    overflow-y: auto;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.9rem;
+    background: #0A0A0F;
+}
+
+.progress-logs-content::-webkit-scrollbar {
+    width: 8px;
+}
+
+.progress-logs-content::-webkit-scrollbar-track {
+    background: var(--bg-darker);
+}
+
+.progress-logs-content::-webkit-scrollbar-thumb {
+    background: var(--primary);
+    border-radius: 4px;
+}
+
+.log-entry {
+    padding: 0.5rem;
+    margin-bottom: 0.25rem;
+    border-left: 3px solid transparent;
+    transition: all 0.2s;
+}
+
+.log-entry:hover {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.log-timestamp {
+    color: var(--text-muted);
+    margin-right: 1rem;
+    font-size: 0.85rem;
+}
+
+.log-message {
+    color: var(--text-primary);
+}
+
+.log-info {
+    border-left-color: #00E5FF;
+}
+
+.log-info .log-message {
+    color: #00E5FF;
+}
+
+.log-success {
+    border-left-color: #00FF88;
+}
+
+.log-success .log-message {
+    color: #00FF88;
+}
+
+.log-warning {
+    border-left-color: #FFB800;
+}
+
+.log-warning .log-message {
+    color: #FFB800;
+}
+
+.log-error {
+    border-left-color: #FF3B3B;
+}
+
+.log-error .log-message {
+    color: #FF3B3B;
+}
+
+/* Animation d'apparition */
+.log-entry {
+    animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateX(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}

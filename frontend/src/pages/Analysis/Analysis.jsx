@@ -1,1357 +1,1293 @@
-// src/pages/Analysis/Analysis.jsx - VERSION COMPLÈTE
-import React, { useState, useEffect } from 'react';
-import { useLocation, useNavigate, Link } from 'react-router-dom';
-import Sidebar from '../../components/Sidebar';
-import '../../assets/css/dashboard.css';
+// Location: C:\Users\Admin\Downloads\scrapping.web\scrapping.web\scraper-pro\frontend\src\pages\Analysis\Analysis.jsx
+// Component for website analysis and scraping configuration
+// Allows users to input URL, view auto-detected content types, configure scraping options
+// RELEVANT FILES: App.jsx, AuthContext.jsx, analysis.css, Results.jsx
+
+import { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import api from '../../services/api';
+import { useScraping } from '../../contexts/ScrapingContext';
 import '../../assets/css/analysis.css';
+import '../../assets/css/format-modal.css';
 
-const Analysis = () => {
-  const location = useLocation();
+export default function Analysis() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const { 
+    startScrapingTask, 
+    startAnalysisTask, 
+    isScrapingInProgress, 
+    isAnalysisInProgress,
+    addNotification,
+    activeTasks,
+    getCompletedAnalysis,
+  } = useScraping();
   
-  const searchParams = new URLSearchParams(location.search);
-  const inputParam = searchParams.get('input') || '';
-  const typeParam = searchParams.get('type') || 'url';
-
-  const [analysis, setAnalysis] = useState({
-    isLoading: false,
-    isComplete: false,
-    progress: 0,
-    error: null
+  // State management
+  const [url, setUrl] = useState('');
+  const [includeSubdomains, setIncludeSubdomains] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [showResults, setShowResults] = useState(false);
+  const [currentStep, setCurrentStep] = useState(1);
+  const [sessionId, setSessionId] = useState(null);
+  
+  // Analysis results
+  const [siteInfo, setSiteInfo] = useState({
+    domain: '',
+    pageCount: 0,
+    contentTypesCount: 0
   });
-
-  const [targetInfo, setTargetInfo] = useState({
-    input: inputParam,
-    type: typeParam,
-    title: '',
-    favicon: '',
-    lastAnalyzed: '',
-    totalElements: 0,
-    successRate: 0
+  
+  // Subdomain results
+  const [subdomains, setSubdomains] = useState({
+    scrapable: [],
+    nonScrapable: [],
+    total: 0
   });
-
-  const [detectedElements, setDetectedElements] = useState([]);
-  const [scrapingConfig, setScrapingConfig] = useState({
-    name: '',
-    schedule: 'manual',
-    depth: 1,
-    pagination: true,
-    saveFormat: 'json',
-    maxPages: 10
+  
+  // Paths/directories results
+  const [paths, setPaths] = useState({
+    discovered: [],
+    total: 0,
+    sources: []
   });
-
-  // Détecter le type d'entrée
-  const detectInputType = (input) => {
-    const trimmed = input.trim();
+  
+  // Content type selection
+  const [selectedTypes, setSelectedTypes] = useState([]);
+  const [contentTypes, setContentTypes] = useState([]);
+  const [scrapableContent, setScrapableContent] = useState(null);
+  const [selectedScrapableTypes, setSelectedScrapableTypes] = useState([]);
+  const [expandedScrapable, setExpandedScrapable] = useState(null);
+  
+  // Advanced options
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [advancedOptions, setAdvancedOptions] = useState({
+    depth: '2',
+    delay: '500',
+    userAgent: 'Chrome (Desktop)',
+    timeout: '30'
+  });
+  
+  // Custom selectors
+  const [customSelectors, setCustomSelectors] = useState([
+    { name: 'Titre produit', selector: 'h2.product-title' },
+    { name: 'Prix', selector: 'span.price' }
+  ]);
+  
+  // Storage format
+  const [selectedFormat, setSelectedFormat] = useState('json');
+  const [includeImagesZip, setIncludeImagesZip] = useState(false);
+  const formats = [
+    { id: 'json', icon: '🔧', name: 'JSON' },
+    { id: 'csv', icon: '📄', name: 'CSV' },
+    { id: 'excel', icon: '📊', name: 'Excel' },
+    { id: 'pdf', icon: '📕', name: 'PDF' },
+    { id: 'xml', icon: '📋', name: 'XML' }
+  ];
+  
+  // Output formats (like Firecrawl)
+  const [outputFormats, setOutputFormats] = useState({
+    markdown: true,
+    summary: true,
+    links: true,
+    html: true,
+    screenshot: true,
+    json: true,
+    branding: false,
+    images: true
+  });
+  
+  const [htmlMode, setHtmlMode] = useState('cleaned'); // 'cleaned' or 'raw'
+  const [screenshotMode, setScreenshotMode] = useState('viewport'); // 'viewport' or 'fullpage'
+  
+  const [showFormatModal, setShowFormatModal] = useState(false);
+  
+  // Vérifier si une analyse en cours est terminée (quand on revient sur la page)
+  useEffect(() => {
+    // Chercher une tâche d'analyse terminée pour cette URL
+    const completedTask = activeTasks.find(t => 
+      t.type === 'analysis' && 
+      t.status === 'completed' && 
+      t.results
+    );
     
-    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-      return 'url';
+    if (completedTask && completedTask.results) {
+      // Une analyse est terminée, charger les résultats
+      handleAnalysisComplete(completedTask.results);
+      setUrl(completedTask.url);
+      setSessionId(completedTask.sessionId);
     }
-    
-    if (trimmed.includes('<') && trimmed.includes('>')) {
-      return 'html';
+  }, [activeTasks]);
+  
+  // Normalize URL (add https:// if missing)
+  const normalizeUrl = (urlString) => {
+    urlString = urlString.trim();
+    if (!urlString.startsWith('http://') && !urlString.startsWith('https://')) {
+      return `https://${urlString}`;
     }
-    
-    return 'selector';
+    return urlString;
   };
-
-  // Détecter le type de site depuis l'URL
-  const detectSiteTypeFromUrl = (url) => {
+  
+  // Validate URL
+  const isValidUrl = (urlString) => {
     try {
-      const urlObj = new URL(url);
-      const hostname = urlObj.hostname.toLowerCase();
-      
-      // E-commerce
-      if (hostname.includes('amazon') || hostname.includes('ebay') || 
-          hostname.includes('aliexpress') || hostname.includes('shop') ||
-          hostname.includes('darty') || hostname.includes('fnac') ||
-          hostname.includes('cdiscount') || hostname.includes('boulanger')) {
-        return 'ecommerce';
-      }
-      
-      // Templates
-      if (hostname.includes('template') || hostname.includes('theme') ||
-          hostname.includes('themeforest') || hostname.includes('creativemarket')) {
-        return 'template';
-      }
-      
-      // Blogs
-      if (hostname.includes('blog') || hostname.includes('medium') || 
-          hostname.includes('wordpress') || hostname.includes('blogger') ||
-          hostname.includes('tumblr') || hostname.includes('dev.to')) {
-        return 'blog';
-      }
-      
-      // GitHub
-      if (hostname.includes('github')) {
-        return 'github';
-      }
-      
-      // Actualités
-      if (hostname.includes('news') || hostname.includes('lemonde') ||
-          hostname.includes('figaro') || hostname.includes('20minutes')) {
-        return 'news';
-      }
-      
-      return 'generic';
-    } catch {
-      return 'generic';
+      new URL(urlString);
+      return true;
+    } catch (e) {
+      return false;
     }
   };
-
-  // Détecter le type de contenu depuis le sélecteur CSS
-  const detectContentTypeFromSelector = (selector) => {
-    const sel = selector.toLowerCase();
-    
-    if (sel.includes('.product') || sel.includes('.item') || sel.includes('.card')) {
-      return 'ecommerce';
-    } else if (sel.includes('.template') || sel.includes('.theme')) {
-      return 'template';
-    } else if (sel.includes('article') || sel.includes('.post') || sel.includes('.blog')) {
-      return 'blog';
-    } else if (sel.includes('.repo') || sel.includes('.repository')) {
-      return 'github';
-    } else if (sel.includes('.news') || sel.includes('.article')) {
-      return 'news';
-    } else if (sel.includes('#price') || sel.includes('.price')) {
-      return 'price';
-    } else if (sel.includes('.image') || sel.includes('img')) {
-      return 'image';
-    } else if (sel.includes('h1') || sel.includes('h2') || sel.includes('.title')) {
-      return 'title';
-    }
-    
-    return 'generic';
-  };
-
-  // Générer des données mock selon le type de contenu
-  const generateMockElements = (input, inputType) => {
-    // Si c'est un sélecteur CSS
-    if (inputType === 'selector') {
-      const contentType = detectContentTypeFromSelector(input);
-      
-      switch(contentType) {
-        case 'ecommerce':
-          return [
-            { id: 1, name: 'Produits', icon: 'fas fa-box', count: 45, selector: input, confidence: 95, isSelected: true },
-            { id: 2, name: 'Prix', icon: 'fas fa-tag', count: 45, selector: input + ' .price', confidence: 92, isSelected: true },
-            { id: 3, name: 'Images', icon: 'fas fa-image', count: 45, selector: input + ' img', confidence: 90, isSelected: true },
-            { id: 4, name: 'Titres', icon: 'fas fa-heading', count: 45, selector: input + ' h3', confidence: 88, isSelected: true },
-            { id: 5, name: 'Liens', icon: 'fas fa-link', count: 45, selector: input + ' a', confidence: 85, isSelected: false }
-          ];
-        
-        case 'template':
-          return [
-            { id: 1, name: 'Templates', icon: 'fas fa-palette', count: 32, selector: input, confidence: 96, isSelected: true },
-            { id: 2, name: 'Prix', icon: 'fas fa-tag', count: 32, selector: input + ' .price', confidence: 94, isSelected: true },
-            { id: 3, name: 'Démos', icon: 'fas fa-eye', count: 32, selector: input + ' .demo-link', confidence: 92, isSelected: true },
-            { id: 4, name: 'Catégories', icon: 'fas fa-tags', count: 8, selector: input + ' .category', confidence: 89, isSelected: true },
-            { id: 5, name: 'Avis', icon: 'fas fa-star', count: 128, selector: input + ' .review', confidence: 86, isSelected: false }
-          ];
-        
-        case 'blog':
-          return [
-            { id: 1, name: 'Articles', icon: 'fas fa-newspaper', count: 25, selector: input, confidence: 97, isSelected: true },
-            { id: 2, name: 'Titres', icon: 'fas fa-heading', count: 25, selector: input + ' h2', confidence: 95, isSelected: true },
-            { id: 3, name: 'Dates', icon: 'fas fa-calendar', count: 25, selector: input + ' .date', confidence: 93, isSelected: true },
-            { id: 4, name: 'Auteurs', icon: 'fas fa-user', count: 8, selector: input + ' .author', confidence: 90, isSelected: true },
-            { id: 5, name: 'Commentaires', icon: 'fas fa-comment', count: 150, selector: input + ' .comment', confidence: 87, isSelected: false }
-          ];
-        
-        case 'price':
-          return [
-            { id: 1, name: 'Prix', icon: 'fas fa-tag', count: 67, selector: input, confidence: 98, isSelected: true },
-            { id: 2, name: 'Devises', icon: 'fas fa-euro-sign', count: 67, selector: input, confidence: 96, isSelected: true },
-            { id: 3, name: 'Produits associés', icon: 'fas fa-box', count: 67, selector: input.replace('#price', '.product'), confidence: 85, isSelected: false },
-            { id: 4, name: 'Promotions', icon: 'fas fa-percentage', count: 12, selector: input + '.sale', confidence: 82, isSelected: false }
-          ];
-        
-        default:
-          return [
-            { id: 1, name: 'Éléments ciblés', icon: 'fas fa-bullseye', count: 45, selector: input, confidence: 95, isSelected: true },
-            { id: 2, name: 'Contenu texte', icon: 'fas fa-font', count: 45, selector: input, confidence: 92, isSelected: true },
-            { id: 3, name: 'Attributs', icon: 'fas fa-code', count: 135, selector: input, confidence: 88, isSelected: false },
-            { id: 4, name: 'Éléments enfants', icon: 'fas fa-sitemap', count: 89, selector: input + ' *', confidence: 85, isSelected: false }
-          ];
-      }
-    }
-    
-    // Si c'est du HTML
-    if (inputType === 'html') {
-      return [
-        { id: 1, name: 'Balises HTML', icon: 'fas fa-code', count: countHtmlTags(input), selector: 'balises', confidence: 94, isSelected: true },
-        { id: 2, name: 'Contenu texte', icon: 'fas fa-font', count: countTextNodes(input), selector: 'texte', confidence: 92, isSelected: true },
-        { id: 3, name: 'Attributs', icon: 'fas fa-tag', count: countAttributes(input), selector: 'attributs', confidence: 89, isSelected: true },
-        { id: 4, name: 'Liens', icon: 'fas fa-link', count: countLinks(input), selector: 'a', confidence: 87, isSelected: false },
-        { id: 5, name: 'Images', icon: 'fas fa-image', count: countImages(input), selector: 'img', confidence: 85, isSelected: false }
-      ];
-    }
-    
-    // Si c'est une URL
-    const siteType = detectSiteTypeFromUrl(input);
-    
-    switch(siteType) {
-      case 'ecommerce':
-        return [
-          { id: 1, name: 'Produits', icon: 'fas fa-box', count: 142, selector: '.product-card, .item', confidence: 98, isSelected: true },
-          { id: 2, name: 'Prix', icon: 'fas fa-tag', count: 142, selector: '.price, .amount', confidence: 96, isSelected: true },
-          { id: 3, name: 'Images', icon: 'fas fa-image', count: 245, selector: 'img.product-image, .product-img', confidence: 95, isSelected: true },
-          { id: 4, name: 'Descriptions', icon: 'fas fa-align-left', count: 142, selector: '.product-description, .description', confidence: 92, isSelected: true },
-          { id: 5, name: 'Avis', icon: 'fas fa-star', count: 428, selector: '.review-item, .rating', confidence: 88, isSelected: false },
-          { id: 6, name: 'Catégories', icon: 'fas fa-tags', count: 12, selector: '.category-link, .breadcrumb', confidence: 90, isSelected: true }
-        ];
-      
-      case 'template':
-        return [
-          { id: 1, name: 'Templates', icon: 'fas fa-palette', count: 56, selector: '.template-card, .theme-item', confidence: 97, isSelected: true },
-          { id: 2, name: 'Prix', icon: 'fas fa-tag', count: 56, selector: '.template-price, .price-tag', confidence: 96, isSelected: true },
-          { id: 3, name: 'Catégories', icon: 'fas fa-tags', count: 8, selector: '.category-item, .filter-category', confidence: 94, isSelected: true },
-          { id: 4, name: 'Démos', icon: 'fas fa-eye', count: 56, selector: '.demo-link, .preview-button', confidence: 97, isSelected: false },
-          { id: 5, name: 'Images', icon: 'fas fa-image', count: 168, selector: 'img.template-preview, .screenshot', confidence: 95, isSelected: true },
-          { id: 6, name: 'Descriptions', icon: 'fas fa-align-left', count: 56, selector: '.template-description, .features', confidence: 92, isSelected: true }
-        ];
-      
-      case 'blog':
-        return [
-          { id: 1, name: 'Articles', icon: 'fas fa-newspaper', count: 45, selector: 'article, .post', confidence: 97, isSelected: true },
-          { id: 2, name: 'Titres', icon: 'fas fa-heading', count: 45, selector: 'h1.article-title, .post-title', confidence: 98, isSelected: true },
-          { id: 3, name: 'Auteurs', icon: 'fas fa-user', count: 12, selector: '.author-name, .post-author', confidence: 92, isSelected: true },
-          { id: 4, name: 'Dates', icon: 'fas fa-calendar', count: 45, selector: '.date-published, .post-date', confidence: 94, isSelected: true },
-          { id: 5, name: 'Catégories', icon: 'fas fa-tags', count: 8, selector: '.category-tag, .post-category', confidence: 90, isSelected: false },
-          { id: 6, name: 'Commentaires', icon: 'fas fa-comment', count: 236, selector: '.comment, .comment-item', confidence: 88, isSelected: false }
-        ];
-      
-      case 'github':
-        return [
-          { id: 1, name: 'Répositories', icon: 'fas fa-code-branch', count: 25, selector: '.repo-item, .repository', confidence: 96, isSelected: true },
-          { id: 2, name: 'Stars', icon: 'fas fa-star', count: 25, selector: '.star-count, .stars', confidence: 94, isSelected: true },
-          { id: 3, name: 'Forks', icon: 'fas fa-code-fork', count: 25, selector: '.fork-count, .forks', confidence: 93, isSelected: true },
-          { id: 4, name: 'Issues', icon: 'fas fa-exclamation-circle', count: 89, selector: '.issue-item, .issue', confidence: 91, isSelected: false },
-          { id: 5, name: 'Langages', icon: 'fas fa-code', count: 25, selector: '.language-tag, .lang', confidence: 90, isSelected: true },
-          { id: 6, name: 'Descriptions', icon: 'fas fa-align-left', count: 25, selector: '.repo-description, .description', confidence: 89, isSelected: true }
-        ];
-      
-      default:
-        return [
-          { id: 1, name: 'Liens', icon: 'fas fa-link', count: 234, selector: 'a', confidence: 98, isSelected: true },
-          { id: 2, name: 'Images', icon: 'fas fa-image', count: 89, selector: 'img', confidence: 96, isSelected: true },
-          { id: 3, name: 'Titres', icon: 'fas fa-heading', count: 45, selector: 'h1, h2, h3', confidence: 94, isSelected: true },
-          { id: 4, name: 'Listes', icon: 'fas fa-list', count: 67, selector: 'ul, ol', confidence: 91, isSelected: false },
-          { id: 5, name: 'Tableaux', icon: 'fas fa-table', count: 12, selector: 'table', confidence: 89, isSelected: false },
-          { id: 6, name: 'Formulaires', icon: 'fas fa-edit', count: 8, selector: 'form', confidence: 85, isSelected: false }
-        ];
-    }
-  };
-
-  // Fonctions utilitaires pour HTML
-  const countHtmlTags = (html) => {
-    return (html.match(/<[^>]+>/g) || []).length;
-  };
-
-  const countTextNodes = (html) => {
-    const text = html.replace(/<[^>]+>/g, '').trim();
-    return text.split(/\s+/).filter(word => word.length > 0).length;
-  };
-
-  const countAttributes = (html) => {
-    return (html.match(/\w+="[^"]*"/g) || []).length;
-  };
-
-  const countLinks = (html) => {
-    return (html.match(/<a\s[^>]*>/gi) || []).length;
-  };
-
-  const countImages = (html) => {
-    return (html.match(/<img\s[^>]*>/gi) || []).length;
-  };
-
-  // Démarrer l'analyse (simulation)
-  const startAnalysis = () => {
-    if (!targetInfo.input.trim()) {
-      alert('Veuillez entrer une URL, un sélecteur CSS ou du HTML à analyser');
+  
+  // Handle URL analysis - Mode ASYNCHRONE
+  const handleAnalyze = async () => {
+    if (!url) {
+      alert('Veuillez entrer une URL');
       return;
     }
-
-    setAnalysis({
-      isLoading: true,
-      isComplete: false,
-      progress: 0,
-      error: null
-    });
-
-    // Détecter le type d'entrée réel
-    const actualInputType = detectInputType(targetInfo.input);
     
-    // Simulation de progression
-    const interval = setInterval(() => {
-      setAnalysis(prev => {
-        const newProgress = prev.progress + 20;
-        
-        if (newProgress >= 100) {
-          clearInterval(interval);
-          
-          // Générer éléments selon le type
-          const elements = generateMockElements(targetInfo.input, actualInputType);
-          const totalElements = elements.reduce((sum, el) => sum + el.count, 0);
-          const avgConfidence = Math.round(elements.reduce((sum, el) => sum + el.confidence, 0) / elements.length);
-          
-          // Déterminer le titre
-          let title = '';
-          let typeLabel = '';
-          
-          if (actualInputType === 'selector') {
-            const contentType = detectContentTypeFromSelector(targetInfo.input);
-            title = `Sélecteur CSS (${contentType === 'ecommerce' ? 'E-commerce' : 
-                      contentType === 'template' ? 'Templates' :
-                      contentType === 'blog' ? 'Blog' :
-                      contentType === 'github' ? 'GitHub' :
-                      contentType === 'price' ? 'Prix' :
-                      contentType === 'image' ? 'Images' :
-                      contentType === 'title' ? 'Titres' : 'Générique'})`;
-            typeLabel = 'Sélecteur CSS';
-          } else if (actualInputType === 'html') {
-            title = 'HTML brut analysé';
-            typeLabel = 'HTML';
-          } else {
-            const siteType = detectSiteTypeFromUrl(targetInfo.input);
-            title = `${siteType === 'ecommerce' ? 'Site E-commerce' : 
-                     siteType === 'template' ? 'Site de Templates' :
-                     siteType === 'blog' ? 'Blog' :
-                     siteType === 'github' ? 'GitHub' :
-                     siteType === 'news' ? 'Site d\'Actualités' : 'Site Web'}`;
-            typeLabel = 'URL';
-          }
-          
-          setTargetInfo(prev => ({
-            ...prev,
-            type: actualInputType,
-            title: title,
-            typeLabel: typeLabel,
-            lastAnalyzed: 'À l\'instant',
-            totalElements: totalElements,
-            successRate: avgConfidence
-          }));
-          
-          setDetectedElements(elements);
-          
-          // Générer nom de projet
-          if (actualInputType === 'selector') {
-            const selectorName = targetInfo.input.length > 20 
-              ? targetInfo.input.substring(0, 20) + '...' 
-              : targetInfo.input;
-            setScrapingConfig(prev => ({ ...prev, name: `Scraping: ${selectorName}` }));
-          } else if (actualInputType === 'html') {
-            setScrapingConfig(prev => ({ ...prev, name: 'Scraping HTML' }));
-          } else {
-            try {
-              const urlName = new URL(targetInfo.input).hostname.replace('www.', '');
-              setScrapingConfig(prev => ({ ...prev, name: `Scraping ${urlName}` }));
-            } catch {
-              setScrapingConfig(prev => ({ ...prev, name: `Scraping ${actualInputType}` }));
-            }
-          }
-          
-          return {
-            isLoading: false,
-            isComplete: true,
-            progress: 100,
-            error: null
-          };
-        }
-        
-        return { ...prev, progress: newProgress };
-      });
-    }, 400);
-  };
-
-  // Les autres fonctions restent similaires
-  const toggleElementSelection = (id) => {
-    setDetectedElements(prev => 
-      prev.map(element => 
-        element.id === id 
-          ? { ...element, isSelected: !element.isSelected }
-          : element
-      )
-    );
-  };
-
-  const toggleAllElements = (selected) => {
-    setDetectedElements(prev => 
-      prev.map(element => ({ ...element, isSelected: selected }))
-    );
-  };
-
-//   const startScraping = () => {
-//     const selectedElements = detectedElements.filter(el => el.isSelected);
+    // Normaliser l'URL (ajouter https:// si nécessaire)
+    const normalizedUrl = normalizeUrl(url);
+    setUrl(normalizedUrl);
     
-//     if (selectedElements.length === 0) {
-//       alert('Veuillez sélectionner au moins un élément à scraper');
-//       return;
-//     }
-
-//     if (!scrapingConfig.name.trim()) {
-//       alert('Veuillez donner un nom à votre projet de scraping');
-//       return;
-//     }
-
-//     console.log('Simulation scraping:', {
-//       input: targetInfo.input,
-//       type: targetInfo.type,
-//       selectedElements,
-//       config: scrapingConfig
-//     });
-
-//     alert(`Scraping "${scrapingConfig.name}" démarré !\n\nType: ${targetInfo.typeLabel}\nÉléments: ${selectedElements.length}`);
-    
-//     setTimeout(() => {
-//       navigate('/results');
-//     }, 1500);
-//   };
-
-// Dans Analysis.jsx - MODIFIEZ LA FONCTION startScraping()
-
-const startScraping = () => {
-  const selectedElements = detectedElements.filter(el => el.isSelected);
-  
-  if (selectedElements.length === 0) {
-    alert('Veuillez sélectionner au moins un élément à scraper');
-    return;
-  }
-
-  if (!scrapingConfig.name.trim()) {
-    alert('Veuillez donner un nom à votre projet de scraping');
-    return;
-  }
-
-  // CRÉER LA CONFIGURATION COMPLÈTE
-  const scrapingConfigComplete = {
-    target: targetInfo,
-    selectedElements: selectedElements, // SEULEMENT les éléments sélectionnés
-    config: scrapingConfig,
-    detectedElements: detectedElements, // Tous les éléments détectés
-    timestamp: new Date().toISOString()
-  };
-
-  console.log('Simulation scraping:', scrapingConfigComplete);
-
-  // SAUVEGARDER DANS localStorage AVANT LA REDIRECTION
-  localStorage.setItem('scrapingConfig', JSON.stringify(scrapingConfigComplete));
-  
-  alert(`Scraping "${scrapingConfig.name}" démarré !\n\nType: ${targetInfo.typeLabel}\nÉléments: ${selectedElements.length}`);
-  
-  // Rediriger avec les données en state AUSSI
-  navigate('/results', { 
-    state: { scrapingData: scrapingConfigComplete } 
-  });
-};
-
-
-
-  const exportConfig = () => {
-    const config = {
-      target: targetInfo,
-      selectedElements: detectedElements.filter(el => el.isSelected),
-      config: scrapingConfig,
-      timestamp: new Date().toISOString()
-    };
-
-    const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `scraping-config-${Date.now()}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
-  // Démarrer auto si input fourni
-  useEffect(() => {
-    if (inputParam && !analysis.isComplete && !analysis.isLoading) {
-      startAnalysis();
+    if (!isValidUrl(normalizedUrl)) {
+      alert('Veuillez entrer une URL valide');
+      return;
     }
-  }, [inputParam]);
-
-  // Calcul statistiques
-  const selectedCount = detectedElements.filter(el => el.isSelected).length;
-  const estimatedData = detectedElements
-    .filter(el => el.isSelected)
-    .reduce((sum, el) => sum + el.count, 0);
-  const averageConfidence = selectedCount > 0 
-    ? Math.round(detectedElements
-        .filter(el => el.isSelected)
-        .reduce((sum, el) => sum + el.confidence, 0) / selectedCount)
-    : 0;
-
-  return (
-    <div className="dashboard-container">
-      <Sidebar />
+    
+    setIsAnalyzing(true);
+    setCurrentStep(2);
+    
+    try {
+      // Lancer l'analyse en arrière-plan via le contexte
+      const result = await startAnalysisTask(normalizedUrl, includeSubdomains, (completionResult) => {
+        // Callback appelé quand l'analyse est terminée
+        if (completionResult.success) {
+          console.log('Analyse terminée avec succès:', completionResult.results);
+          // Traiter les résultats
+          handleAnalysisComplete(completionResult.results);
+        } else {
+          console.error('Analyse échouée:', completionResult.error);
+          setCurrentStep(1);
+          setIsAnalyzing(false);
+        }
+      });
       
+      // Enregistrer le session_id
+      if (result.sessionId) {
+        setSessionId(result.sessionId);
+        
+        // Mettre à jour les infos du site
+        const domain = new URL(normalizedUrl).hostname;
+        setSiteInfo({
+          domain: domain,
+          pageCount: 0,
+          contentTypesCount: 0
+        });
+      }
+      
+      // L'utilisateur peut maintenant naviguer ailleurs
+      // La notification le préviendra quand l'analyse sera terminée
+      
+    } catch (error) {
+      console.error('Erreur lors de l\'analyse:', error);
+      alert(`Erreur lors de l'analyse de l'URL: ${error.message || 'Erreur inconnue'}`);
+      setCurrentStep(1);
+      setIsAnalyzing(false);
+    }
+  };
+  
+  // Callback appelé quand l'analyse est terminée
+  const handleAnalysisComplete = (results) => {
+    console.log('Analyse terminée, résultats:', results);
+    
+    // Récupérer l'URL depuis les résultats ou la variable locale
+    const analysisUrl = results.url || url;
+    
+    if (!analysisUrl) {
+      console.error('URL manquante dans les résultats');
+      return;
+    }
+    
+    // Mettre à jour l'URL si elle n'était pas définie
+    if (!url && analysisUrl) {
+      setUrl(analysisUrl);
+    }
+    
+    // Mettre à jour les infos du site
+    let domain;
+    try {
+      domain = new URL(analysisUrl).hostname;
+    } catch (e) {
+      console.error('URL invalide:', analysisUrl, e);
+      domain = analysisUrl;
+    }
+    
+    setSiteInfo({
+      domain: domain,
+      pageCount: results.page_count || 0,
+      contentTypesCount: results.content_types?.length || 0
+    });
+    
+    // Mettre à jour les types de contenu
+    if (results.content_types && results.content_types.length > 0) {
+      setContentTypes(results.content_types);
+    }
+    
+    // Mettre à jour les contenus scrapables détectés
+    if (results.scrapable_content) {
+      setScrapableContent(results.scrapable_content);
+    }
+    
+    // Mettre à jour les sous-domaines
+    if (results.subdomains) {
+      const scrapableList = results.subdomains.scrapable_list || [];
+      const allSubdomains = results.subdomains.all_subdomains || [];
+      const checkDetails = results.subdomains.check_details || {};
+      
+      const nonScrapableList = allSubdomains.filter(
+        subdomain => !scrapableList.includes(subdomain)
+      );
+      
+      setSubdomains({
+        scrapable: scrapableList.map(sub => ({
+          url: sub,
+          status: checkDetails[sub]?.status || 'unknown',
+          protection: checkDetails[sub]?.protection || null,
+          tech_stack: checkDetails[sub]?.tech_stack || []
+        })),
+        nonScrapable: nonScrapableList.map(sub => ({
+          url: sub,
+          status: checkDetails[sub]?.status || 'unknown',
+          protection: checkDetails[sub]?.protection || null,
+          tech_stack: checkDetails[sub]?.tech_stack || []
+        })),
+        total: allSubdomains.length,
+        totalFound: results.subdomains.total_found || 0,
+        sources: results.subdomains.sources || []
+      });
+    }
+    
+    // Mettre à jour les chemins
+    if (results.paths) {
+      setPaths({
+        discovered: results.paths.paths || [],
+        mainPages: results.paths.main_pages || [],
+        allPages: results.paths.all_pages || [],
+        navigation: results.paths.navigation || {},
+        pagesCrawled: results.paths.pages_crawled || 0,
+        total: results.paths.total_found || 0
+      });
+    }
+    
+    // Afficher les résultats
+    setShowResults(true);
+    setCurrentStep(3);
+    setIsAnalyzing(false);
+  };
+  
+  // Toggle content type selection
+  const toggleContentType = (typeId) => {
+    setSelectedTypes(prev => 
+      prev.includes(typeId) 
+        ? prev.filter(id => id !== typeId)
+        : [...prev, typeId]
+    );
+  };
+  
+  // Add custom selector
+  const addCustomSelector = () => {
+    setCustomSelectors([...customSelectors, { name: '', selector: '' }]);
+  };
+  
+  // Remove custom selector
+  const removeCustomSelector = (index) => {
+    setCustomSelectors(customSelectors.filter((_, i) => i !== index));
+  };
+  
+  // Update custom selector
+  const updateCustomSelector = (index, field, value) => {
+    const updated = [...customSelectors];
+    updated[index][field] = value;
+    setCustomSelectors(updated);
+  };
+  
+  // Start scraping
+  const handleStartScraping = async () => {
+    if (selectedTypes.length === 0) {
+      alert('Veuillez sélectionner au moins un type de contenu à extraire');
+      return;
+    }
+    
+    try {
+      setCurrentStep(4);
+      
+      // Préparer la configuration du scraping
+      const config = {
+        url: url,
+        include_subdomains: includeSubdomains,
+        content_types: selectedTypes,
+        depth: parseInt(advancedOptions.depth) || 2,
+        delay: parseInt(advancedOptions.delay) || 500,
+        user_agent: advancedOptions.userAgent,
+        timeout: parseInt(advancedOptions.timeout) || 30,
+        custom_selectors: customSelectors.filter(s => s.name && s.selector),
+        output_format: selectedFormat,
+        include_images_zip: includeImagesZip
+      };
+      
+      // Lancer le scraping en arrière-plan via le contexte
+      const result = await startScrapingTask(url, config, (completionResult) => {
+        // Callback appelé quand le scraping est terminé
+        if (completionResult.success) {
+          console.log('Scraping terminé avec succès:', completionResult.sessionId);
+        } else {
+          console.error('Scraping échoué:', completionResult.error);
+        }
+      });
+      
+      // Rediriger vers le dashboard ou rester ici - l'utilisateur peut naviguer librement
+      addNotification({
+        type: 'info',
+        title: '🚀 Scraping lancé !',
+        message: `Vous pouvez naviguer librement. Session #${result.sessionId}`,
+        sessionId: result.sessionId,
+      });
+      
+      // Option: Rediriger vers les résultats immédiatement ou laisser l'utilisateur choisir
+      // navigate(`/results?session=${result.sessionId}`);
+      // Ou rediriger vers le dashboard
+      navigate('/dashboard');
+      
+    } catch (error) {
+      console.error('Erreur lors du démarrage du scraping:', error);
+      setCurrentStep(3);
+    }
+  };
+  
+  // Calculate step progress
+  const getStepProgress = () => {
+    switch(currentStep) {
+      case 1: return '25%';
+      case 2: return '50%';
+      case 3: return '75%';
+      case 4: return '100%';
+      default: return '25%';
+    }
+  };
+  
+  return (
+    <div className="app-container">
+      {/* Sidebar - SEULEMENT LE LOGO */}
+      <aside className="sidebar">
+        <div className="logo" onClick={() => navigate('/dashboard')} style={{ cursor: 'pointer' }}>
+          <div className="logo-icon">⚡</div>
+          SCRAPER PRO
+        </div>
+      </aside>
+      
+      {/* Main Content */}
       <main className="main-content">
-        <header className="top-bar">
-          <div className="breadcrumb">
-            <Link to="/dashboard">Tableau de Bord</Link> / <span>Configuration du Scraping</span>
-          </div>
-          <div className="top-bar-actions">
-            <button className="btn btn-secondary">
-              <i className="fas fa-bell"></i>
-              <span className="notification-count">2</span>
-            </button>
-          </div>
+        {/* Header */}
+        <header className="page-header">
+          <h1 className="page-title">Nouvelle Analyse</h1>
+          <p className="page-subtitle">
+            Laissez-nous analyser votre site web et nous vous montrerons ce que nous pouvons extraire
+          </p>
         </header>
-
-        {/* En-tête */}
-        <section className="card highlight-card">
-          <div className="card-header">
-            <div>
-              <h3><i className="fas fa-search"></i> Analyse des Éléments Scrappables</h3>
-              <p className="card-subtitle">
-                {targetInfo.title || 'Analyse en attente...'}
-                {targetInfo.typeLabel && <span className="type-badge">{targetInfo.typeLabel}</span>}
+        
+        {/* Step Indicator */}
+        <div className="step-indicator">
+          <div className="step-progress" style={{ width: getStepProgress() }}></div>
+          
+          <div className={`step ${currentStep === 1 ? 'active' : ''} ${currentStep > 1 ? 'completed' : ''}`}>
+            <div className="step-number">1</div>
+            <div className="step-label">URL du site</div>
+          </div>
+          
+          <div className={`step ${currentStep === 2 ? 'active' : ''} ${currentStep > 2 ? 'completed' : ''}`}>
+            <div className="step-number">2</div>
+            <div className="step-label">Analyse auto</div>
+          </div>
+          
+          <div className={`step ${currentStep === 3 ? 'active' : ''} ${currentStep > 3 ? 'completed' : ''}`}>
+            <div className="step-number">3</div>
+            <div className="step-label">Sélection</div>
+          </div>
+          
+          <div className={`step ${currentStep === 4 ? 'active' : ''}`}>
+            <div className="step-number">4</div>
+            <div className="step-label">Configuration</div>
+          </div>
+        </div>
+        
+        {/* Step 1: URL Input */}
+        {!showResults && (
+          <div className="card">
+            <div className="card-header">
+              <h2 className="card-title">
+                <span>🌐</span>
+                Quel site souhaitez-vous scraper ?
+              </h2>
+              <p className="card-description">
+                Entrez simplement l'URL du site web que vous voulez analyser. Notre système va automatiquement détecter les informations disponibles.
               </p>
             </div>
             
-            {!analysis.isComplete ? (
-              <button 
-                className="btn btn-primary"
-                onClick={startAnalysis}
-                disabled={analysis.isLoading}
+            <div className="url-input-section">
+              <label className="input-label">URL du site web</label>
+              <div className="url-input-wrapper">
+                <span className="url-icon">🔗</span>
+                <input
+                  type="text"
+                  className="url-input"
+                  value={url}
+                  onChange={(e) => setUrl(e.target.value)}
+                  placeholder="https://"
+                  onKeyPress={(e) => e.key === 'Enter' && handleAnalyze()}
+                />
+              </div>
+              
+              {/* Subdomain Option */}
+              <div className="subdomain-option">
+                <div className="option-info">
+                  <div className="option-title">Inclure les sous-domaines</div>
+                  <div className="option-description">
+                    Scraper également les sous-domaines du site principal
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  id="includeSubdomains"
+                  checked={includeSubdomains}
+                  onChange={(e) => setIncludeSubdomains(e.target.checked)}
+                />
+                <label htmlFor="includeSubdomains" className="toggle-switch"></label>
+              </div>
+              
+              <button
+                className="btn-analyze"
+                onClick={handleAnalyze}
+                disabled={isAnalyzing}
               >
-                {analysis.isLoading ? (
-                  <>
-                    <i className="fas fa-spinner fa-spin"></i>
-                    Analyse ({analysis.progress}%)
-                  </>
-                ) : (
-                  <>
-                    <i className="fas fa-play"></i>
-                    {targetInfo.type === 'selector' ? 'Analyser le sélecteur' : 
-                     targetInfo.type === 'html' ? 'Analyser le HTML' : 
-                     'Analyser le site'}
-                  </>
-                )}
+                <span className="material-icons">{isAnalyzing ? 'hourglass_empty' : 'rocket_launch'}</span>
+                {isAnalyzing ? 'Analyse en cours...' : 'Analyser le site'}
               </button>
-            ) : (
-              <div className="analysis-status success">
-                <i className="fas fa-check-circle"></i>
-                {detectedElements.length} éléments détectés
+            </div>
+            
+            {/* Message informatif pendant l'analyse asynchrone */}
+            {isAnalyzing && sessionId && (
+              <div className="async-analysis-info" style={{
+                marginTop: '2rem',
+                padding: '1.5rem',
+                background: 'linear-gradient(135deg, rgba(0, 229, 255, 0.1), rgba(123, 97, 255, 0.1))',
+                border: '1px solid rgba(0, 229, 255, 0.3)',
+                borderRadius: '12px',
+                textAlign: 'center'
+              }}>
+                <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>🔍</div>
+                <h3 style={{ color: '#00E5FF', marginBottom: '0.5rem' }}>Analyse en cours...</h3>
+                <p style={{ color: '#A0A0B0', marginBottom: '1.5rem' }}>
+                  L'analyse se poursuit en arrière-plan. Vous pouvez naviguer librement, 
+                  une notification vous préviendra quand c'est terminé.
+                </p>
+                <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+                  <button 
+                    className="btn-secondary"
+                    onClick={() => navigate('/dashboard')}
+                    style={{
+                      padding: '0.75rem 1.5rem',
+                      background: 'rgba(0, 229, 255, 0.2)',
+                      border: '1px solid #00E5FF',
+                      borderRadius: '8px',
+                      color: '#00E5FF',
+                      cursor: 'pointer',
+                      fontWeight: '600'
+                    }}
+                  >
+                    Aller au Dashboard
+                  </button>
+                  <button 
+                    className="btn-secondary"
+                    onClick={() => {
+                      setIsAnalyzing(false);
+                      setSessionId(null);
+                    }}
+                    style={{
+                      padding: '0.75rem 1.5rem',
+                      background: 'rgba(160, 160, 176, 0.1)',
+                      border: '1px solid #606070',
+                      borderRadius: '8px',
+                      color: '#A0A0B0',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Masquer ce message
+                  </button>
+                </div>
               </div>
             )}
           </div>
-
-          <div className="target-info">
-          
-            {/* // src/pages/Analysis/Analysis.jsx - PARTIE MODIFIÉE */}
-
-{/* Dans la section target-info, remplacez la partie conditionnelle par : */}
-<div className="target-input">
-  <i className={`fas ${
-    targetInfo.type === 'url' ? 'fa-link' :
-    targetInfo.type === 'selector' ? 'fa-code' :
-    'fa-file-code'
-  }`}></i>
-  <div className="input-container">
-    <strong className="input-label">
-      {targetInfo.type === 'url' ? 'URL cible :' :
-       targetInfo.type === 'selector' ? 'Sélecteur CSS :' :
-       'HTML brut :'}
-    </strong>
-    
-    {targetInfo.type === 'html' ? (
-      <div className="html-input-wrapper">
-        <textarea 
-          value={targetInfo.input}
-          onChange={(e) => setTargetInfo(prev => ({ ...prev, input: e.target.value }))}
-          placeholder={`<div class="example">
-  <h1>Titre de la page</h1>
-  <p>Contenu intéressant à scraper...</p>
-  <ul>
-    <li>Élément 1</li>
-    <li>Élément 2</li>
-  </ul>
-</div>`}
-          className="html-textarea"
-          rows="6"
-          spellCheck="false"
-        />
-        <div className="html-input-info">
-          <span className="html-stats">
-            <i className="fas fa-code"></i>
-            {countHtmlTags(targetInfo.input)} balises
-          </span>
-          <span className="html-stats">
-            <i className="fas fa-font"></i>
-            {countTextNodes(targetInfo.input)} mots
-          </span>
-          <button 
-            className="btn btn-small btn-secondary"
-            onClick={() => {
-              // Exemple HTML prérempli
-              setTargetInfo(prev => ({ 
-                ...prev, 
-                input: `<div class="product-card">
-  <img src="product.jpg" alt="Produit" class="product-image">
-  <h3 class="product-title">iPhone 15 Pro Max</h3>
-  <div class="product-price">
-    <span class="price">1,299€</span>
-    <span class="old-price">1,499€</span>
-  </div>
-  <p class="product-description">Smartphone haut de gamme avec caméra avancée</p>
-  <div class="product-rating">
-    <span class="stars">⭐⭐⭐⭐⭐</span>
-    <span class="review-count">(428 avis)</span>
-  </div>
-</div>` 
-              }));
-            }}
-          >
-            <i className="fas fa-magic"></i> Exemple
-          </button>
-        </div>
-      </div>
-    ) : targetInfo.type === 'selector' ? (
-      <div className="selector-input-wrapper">
-        <div className="input-with-icon">
-          <span className="selector-prefix">#</span>
-          <input 
-            type="text" 
-            value={targetInfo.input}
-            onChange={(e) => setTargetInfo(prev => ({ ...prev, input: e.target.value }))}
-            placeholder=".product-card, article, #price, h1.title"
-            className="selector-input"
-          />
-        </div>
-        <div className="selector-examples">
-          <small>Exemples: </small>
-          <button 
-            className="example-chip"
-            onClick={() => setTargetInfo(prev => ({ ...prev, input: '.product-card' }))}
-          >
-            .product-card
-          </button>
-          <button 
-            className="example-chip"
-            onClick={() => setTargetInfo(prev => ({ ...prev, input: 'article' }))}
-          >
-            article
-          </button>
-          <button 
-            className="example-chip"
-            onClick={() => setTargetInfo(prev => ({ ...prev, input: '#price' }))}
-          >
-            #price
-          </button>
-        </div>
-      </div>
-    ) : (
-      <div className="url-input-wrapper">
-        <div className="input-with-icon">
-          <span className="url-prefix">https://</span>
-          <input 
-            type="text" 
-            value={targetInfo.input}
-            onChange={(e) => setTargetInfo(prev => ({ ...prev, input: e.target.value }))}
-            placeholder="www.exemple.com/page"
-            className="url-input-field"
-          />
-        </div>
-        <div className="url-examples">
-          <small>Exemples: </small>
-          <button 
-            className="example-chip"
-            onClick={() => setTargetInfo(prev => ({ ...prev, input: 'https://www.amazon.com/electronics' }))}
-          >
-            amazon.com
-          </button>
-          <button 
-            className="example-chip"
-            onClick={() => setTargetInfo(prev => ({ ...prev, input: 'https://themeforest.net' }))}
-          >
-            themeforest.net
-          </button>
-          <button 
-            className="example-chip"
-            onClick={() => setTargetInfo(prev => ({ ...prev, input: 'https://medium.com' }))}
-          >
-            medium.com
-          </button>
-        </div>
-      </div>
-    )}
-  </div>
-</div>
-
-            {analysis.isComplete && (
-              <div className="target-meta">
-                <span>
-                  <i className="fas fa-bullseye"></i>
-                  <strong>Éléments :</strong> {targetInfo.totalElements.toLocaleString()}
-                </span>
-                <span>
-                  <i className="fas fa-chart-line"></i>
-                  <strong>Confiance :</strong> {targetInfo.successRate}%
-                </span>
-                <span>
-                  <i className="fas fa-history"></i>
-                  <strong>Analyse :</strong> {targetInfo.lastAnalyzed}
-                </span>
-              </div>
-            )}
-          </div>
-        </section>
-
-        {/* Progression - même que précédemment */}
-        {analysis.isLoading && (
-          <section className="card">
-            <div className="card-header">
-              <h4><i className="fas fa-sync-alt fa-spin"></i> Analyse en cours...</h4>
-            </div>
-            <div className="analysis-progress">
-              <div className="progress-bar">
-                <div 
-                  className="progress-fill" 
-                  style={{ width: `${analysis.progress}%` }}
-                ></div>
-              </div>
-              <div className="progress-steps">
-                <div className={`step ${analysis.progress >= 20 ? 'completed' : ''}`}>
-                  <div className="step-icon"><i className="fas fa-sitemap"></i></div>
-                  <span>Structure</span>
-                </div>
-                <div className={`step ${analysis.progress >= 40 ? 'completed' : ''}`}>
-                  <div className="step-icon"><i className="fas fa-eye"></i></div>
-                  <span>Détection</span>
-                </div>
-                <div className={`step ${analysis.progress >= 60 ? 'completed' : ''}`}>
-                  <div className="step-icon"><i className="fas fa-tags"></i></div>
-                  <span>Catégorisation</span>
-                </div>
-                <div className={`step ${analysis.progress >= 80 ? 'completed' : ''}`}>
-                  <div className="step-icon"><i className="fas fa-magic"></i></div>
-                  <span>Optimisation</span>
-                </div>
-                <div className={`step ${analysis.progress >= 100 ? 'completed' : ''}`}>
-                  <div className="step-icon"><i className="fas fa-check"></i></div>
-                  <span>Terminé</span>
-                </div>
-              </div>
-            </div>
-          </section>
         )}
-
-        {/* Éléments détectés - même que précédemment */}
-        {analysis.isComplete && (
-          <>
-            <section className="card">
+        
+        {/* Step 2 & 3: Analysis Results */}
+        {showResults && (
+          <div className="analysis-results visible">
+            <div className="card">
               <div className="card-header">
-                <h3><i className="fas fa-bullseye"></i> Éléments Détectés</h3>
-                <div className="selection-actions">
-                  <button 
-                    className="btn btn-small"
-                    onClick={() => toggleAllElements(true)}
-                  >
-                    <i className="fas fa-check-double"></i> Tout sélectionner
-                  </button>
-                  <button 
-                    className="btn btn-small btn-secondary"
-                    onClick={() => toggleAllElements(false)}
-                  >
-                    <i className="fas fa-times"></i> Tout désélectionner
-                  </button>
+                <h2 className="card-title">
+                  <span>✨</span>
+                  Analyse terminée !
+                </h2>
+                <p className="card-description">
+                  Voici ce que nous avons trouvé sur ce site. Cochez les éléments que vous souhaitez extraire.
+                </p>
+              </div>
+              
+              {/* Site Info */}
+              <div className="site-info-card">
+                <div className="site-info-grid">
+                  <div className="info-item">
+                    <span className="info-label">Domaine</span>
+                    <span className="info-value">{siteInfo.domain}</span>
+                  </div>
+                  <div className="info-item">
+                    <span className="info-label">Pages détectées</span>
+                    <span className="info-value" style={{ color: 'var(--accent)' }}>
+                      {siteInfo.pageCount}
+                    </span>
+                  </div>
+                  <div className="info-item">
+                    <span className="info-label">Types de contenu</span>
+                    <span className="info-value" style={{ color: 'var(--success)' }}>
+                      {siteInfo.contentTypesCount}
+                    </span>
+                  </div>
                 </div>
               </div>
-
-              <div className="elements-grid">
-                {detectedElements.map((element) => (
-                  <div 
-                    key={element.id} 
-                    className={`element-card ${element.isSelected ? 'selected' : ''}`}
-                    onClick={() => toggleElementSelection(element.id)}
-                  >
-                    <div className="element-header">
-                      <div className="element-icon">
-                        <i className={element.icon}></i>
-                      </div>
-                      <div className="element-title">
-                        <h4>{element.name}</h4>
-                        <span className="element-count">{element.count} éléments</span>
-                      </div>
-                      <div className="element-confidence">
-                        <div className="confidence-badge">
-                          {element.confidence}%
-                        </div>
+              
+              {/* Subdomains Section */}
+              {includeSubdomains && subdomains.total > 0 && (
+                <div className="subdomains-section">
+                  <h3 className="section-title">
+                    <span>🌐</span>
+                    Sous-domaines découverts ({subdomains.total})
+                  </h3>
+                  
+                  {/* Scrapable Subdomains */}
+                  {subdomains.scrapable.length > 0 && (
+                    <div className="subdomain-group">
+                      <h4 className="subdomain-group-title">
+                        <span className="status-badge success">✓</span>
+                        Scrapables ({subdomains.scrapable.length})
+                      </h4>
+                      <div className="subdomain-list">
+                        {subdomains.scrapable.map((sub, idx) => (
+                          <div key={idx} className="subdomain-item scrapable">
+                            <div className="subdomain-url">
+                              <span className="subdomain-icon">✅</span>
+                              <span>{sub.url}</span>
+                            </div>
+                            <div className="subdomain-meta">
+                              <span className="status-code">{sub.status}</span>
+                              {sub.tech_stack.length > 0 && (
+                                <span className="tech-stack">
+                                  {sub.tech_stack.slice(0, 2).join(', ')}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
-                    
-                    <div className="element-body">
-                      <p className="element-description">
-                        {targetInfo.type === 'html' && element.selector === 'balises' 
-                          ? 'Balises HTML détectées'
-                          : targetInfo.type === 'html' && element.selector === 'texte'
-                          ? 'Contenu texte extrait'
-                          : targetInfo.type === 'html' && element.selector === 'attributs'
-                          ? 'Attributs HTML'
-                          : `Sélecteur: ${element.selector}`}
-                      </p>
-                    </div>
-                    
-                    <div className="element-footer">
-                      <div className="element-toggle">
-                        <div className={`toggle-switch ${element.isSelected ? 'active' : ''}`}>
-                          <div className="toggle-slider"></div>
-                        </div>
-                        <span>{element.isSelected ? 'Sélectionné' : 'Non sélectionné'}</span>
+                  )}
+                  
+                  {/* Non-Scrapable Subdomains */}
+                  {subdomains.nonScrapable.length > 0 && (
+                    <div className="subdomain-group">
+                      <h4 className="subdomain-group-title">
+                        <span className="status-badge warning">⚠</span>
+                        Non-scrapables ({subdomains.nonScrapable.length})
+                      </h4>
+                      <div className="subdomain-list">
+                        {subdomains.nonScrapable.map((sub, idx) => (
+                          <div key={idx} className="subdomain-item non-scrapable">
+                            <div className="subdomain-url">
+                              <span className="subdomain-icon">
+                                {sub.status >= 500 ? '❌' : '🚫'}
+                              </span>
+                              <span>{sub.url}</span>
+                            </div>
+                            <div className="subdomain-meta">
+                              <span className="status-code error">{sub.status}</span>
+                              {sub.protection && (
+                                <span className="protection-badge">
+                                  🛡️ {sub.protection}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
                       </div>
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              {/* Paths/Directories Section */}
+              {paths.total > 0 && (
+                <div className="paths-section">
+                  <h3 className="section-title">
+                    <span>📂</span>
+                    Pages découvertes ({paths.total}) - {paths.pagesCrawled} pages crawlées
+                  </h3>
+                  
+                  {/* Main Navigation Pages */}
+                  {paths.mainPages && paths.mainPages.length > 0 && (
+                    <div className="main-pages-group">
+                      <h4 className="subdomain-group-title">
+                        <span className="status-badge success">⭐</span>
+                        Pages principales ({paths.mainPages.length})
+                      </h4>
+                      <div className="paths-list">
+                        {paths.mainPages.map((page, idx) => (
+                          <div key={idx} className="path-item main-page">
+                            <span className="path-icon">🔗</span>
+                            <div className="path-details">
+                              <span className="path-text">{page.text || 'Sans titre'}</span>
+                              <span className="path-url">{page.url}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* All Discovered Paths with Previews */}
+                  {paths.allPages && paths.allPages.length > 0 && (
+                    <div className="all-paths-group">
+                      <h4 className="subdomain-group-title">
+                        <span className="status-badge">📄</span>
+                        Toutes les pages découvertes ({paths.allPages.length})
+                      </h4>
+                      <div className="paths-list">
+                        {paths.allPages.map((page, idx) => (
+                          <div key={idx} className="path-item-with-preview">
+                            <div className="path-header">
+                              <span className="path-icon">📄</span>
+                              <div className="path-details">
+                                <span className="path-text">{page.title || 'Sans titre'}</span>
+                                <a href={page.url} target="_blank" rel="noopener noreferrer" className="path-url">
+                                  {page.url}
+                                </a>
+                              </div>
+                            </div>
+                            
+                            {/* Preview Section */}
+                            {page.preview && (
+                              <div className="page-preview">
+                                {/* Meta Description */}
+                                {page.preview.meta?.description && (
+                                  <div className="preview-description">
+                                    <span className="preview-label">📝 Description:</span>
+                                    <span className="preview-text">{page.preview.meta.description}</span>
+                                  </div>
+                                )}
+                                
+                                {/* Text Preview */}
+                                {page.preview.text_preview && (
+                                  <div className="preview-text-content">
+                                    <span className="preview-label">📄 Aperçu:</span>
+                                    <span className="preview-text">{page.preview.text_preview}</span>
+                                  </div>
+                                )}
+                                
+                                {/* Images Preview */}
+                                {page.preview.images && page.preview.images.length > 0 && (
+                                  <div className="preview-images">
+                                    <span className="preview-label">🖼️ Images ({page.preview.images.length}):</span>
+                                    <div className="images-grid">
+                                      {page.preview.images.slice(0, 4).map((img, imgIdx) => (
+                                        <div key={imgIdx} className="preview-image-item">
+                                          <img 
+                                            src={img.src} 
+                                            alt={img.alt || 'Image'} 
+                                            loading="lazy"
+                                            onError={(e) => e.target.style.display = 'none'}
+                                          />
+                                          {img.alt && <span className="image-alt">{img.alt}</span>}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                                
+                                {/* Stats */}
+                                {page.preview.stats && (
+                                  <div className="preview-stats">
+                                    <span className="preview-label">📊 Statistiques:</span>
+                                    <div className="stats-grid">
+                                      {page.preview.stats.total_links > 0 && (
+                                        <span className="stat-item">🔗 {page.preview.stats.total_links} liens</span>
+                                      )}
+                                      {page.preview.stats.total_images > 0 && (
+                                        <span className="stat-item">🖼️ {page.preview.stats.total_images} images</span>
+                                      )}
+                                      {page.preview.stats.total_forms > 0 && (
+                                        <span className="stat-item">📝 {page.preview.stats.total_forms} formulaires</span>
+                                      )}
+                                      {page.preview.stats.total_tables > 0 && (
+                                        <span className="stat-item">📋 {page.preview.stats.total_tables} tableaux</span>
+                                      )}
+                                      {page.preview.stats.total_lists > 0 && (
+                                        <span className="stat-item">📌 {page.preview.stats.total_lists} listes</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* All Discovered Paths (simple list) */}
+                  {paths.discovered && paths.discovered.length > 0 && (
+                    <div className="all-paths-group">
+                      <h4 className="subdomain-group-title">
+                        <span className="status-badge">📄</span>
+                        Tous les chemins ({paths.discovered.length})
+                      </h4>
+                      <div className="paths-list">
+                        {paths.discovered.map((path, idx) => (
+                          <div key={idx} className="path-item">
+                            <span className="path-icon">📄</span>
+                            <span className="path-url">{path}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              {/* Detected Content Types */}
+              <div className="content-types-section">
+                <h3 className="section-title">
+                  <span>📦</span>
+                  Types de contenu détectés
+                </h3>
+                
+                {contentTypes.length > 0 ? (
+                  <div className="content-grid">
+                    {contentTypes.map((type) => (
+                      <div
+                        key={type.id}
+                        className={`content-type-card ${selectedTypes.includes(type.id) ? 'selected' : ''}`}
+                        onClick={() => toggleContentType(type.id)}
+                      >
+                        <div className="checkbox-indicator"></div>
+                        <span className="material-icons content-icon">{type.icon}</span>
+                        <div className="content-title">{type.title}</div>
+                        <div className="content-description">{type.description}</div>
+                        <div className="content-count">{type.count}</div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ 
+                    padding: '2rem', 
+                    textAlign: 'center', 
+                    color: 'var(--text-muted)',
+                    background: 'var(--card-bg)',
+                    borderRadius: '8px',
+                    border: '1px solid var(--border-color)'
+                  }}>
+                    <p style={{ fontSize: '1.1rem', marginBottom: '0.5rem' }}>Aucun type de contenu détecté</p>
+                    <p style={{ fontSize: '0.9rem' }}>L'analyse n'a trouvé aucun élément extractible sur ce site.</p>
+                  </div>
+                )}
+              </div>
+              
+              {/* Scrapable Content Details */}
+              {scrapableContent && scrapableContent.detected_types && scrapableContent.detected_types.length > 0 && (
+                <div className="content-types-section" style={{ marginTop: '2rem' }}>
+                  <h3 className="section-title">
+                    <span>🔍</span>
+                    Contenus scrapables détectés
+                  </h3>
+                  <div style={{ 
+                    marginBottom: '1rem',
+                    padding: '0.75rem 1rem',
+                    background: 'var(--card-bg)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: '6px',
+                    fontSize: '0.9rem',
+                    color: 'var(--text-muted)'
+                  }}>
+                    <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap' }}>
+                      <span><strong>{scrapableContent.total_types}</strong> types détectés</span>
+                      <span>Complexité: <strong>{scrapableContent.structure_complexity}</strong></span>
+                      <span>Pagination: <strong>{scrapableContent.has_pagination ? 'Oui' : 'Non'}</strong></span>
+                      <span>Recommandation: <strong>{scrapableContent.recommended_action}</strong></span>
                     </div>
                   </div>
-                ))}
-              </div>
-
-              <div className="selection-summary">
-                <div className="summary-item">
-                  <span className="summary-label">Éléments sélectionnés :</span>
-                  <span className="summary-value">
-                    {selectedCount} / {detectedElements.length}
-                  </span>
-                </div>
-                <div className="summary-item">
-                  <span className="summary-label">Données estimées :</span>
-                  <span className="summary-value">
-                    {estimatedData.toLocaleString()} éléments
-                  </span>
-                </div>
-                <div className="summary-item">
-                  <span className="summary-label">Confiance moyenne :</span>
-                  <span className="summary-value">
-                    {averageConfidence}%
-                  </span>
-                </div>
-              </div>
-            </section>
-
-            {/* Configuration du scraping - reste identique */}
-            <section className="card">
-              <div className="card-header">
-                <h3><i className="fas fa-cog"></i> Configuration du Scraping</h3>
-              </div>
-
-              <div className="scraping-config">
-                <div className="config-section">
-                  <h4><i className="fas fa-info-circle"></i> Informations du projet</h4>
-                  <div className="config-row">
-                    <div className="config-field">
-                      <label>Nom du projet *</label>
-                      <input 
-                        type="text" 
-                        placeholder={
-                          targetInfo.type === 'selector' ? "ex: Scraping sélecteur .product-card" :
-                          targetInfo.type === 'html' ? "ex: Scraping HTML structure" :
-                          "ex: Scraping Amazon Électronique"
+                  
+                  <div className="content-grid">
+                    {scrapableContent.detected_types.map((type, index) => {
+                      // Extraire le texte de l'échantillon
+                      let sampleText = '';
+                      if (type.sample) {
+                        if (typeof type.sample === 'string') {
+                          sampleText = type.sample;
+                        } else if (type.sample.text) {
+                          sampleText = type.sample.text;
+                        } else if (type.sample.title) {
+                          sampleText = type.sample.title;
+                        } else if (type.sample.name) {
+                          sampleText = type.sample.name;
                         }
-                        value={scrapingConfig.name}
-                        onChange={(e) => setScrapingConfig(prev => ({ 
-                          ...prev, 
-                          name: e.target.value 
-                        }))}
+                      }
+                      
+                      // Aperçu par défaut si vide
+                      if (!sampleText || sampleText.trim() === '') {
+                        if (type.type === 'media') {
+                          sampleText = 'Images et médias trouvés sur le site';
+                        } else if (type.type === 'tables') {
+                          sampleText = 'Tableaux de données structurés';
+                        } else if (type.type === 'text_content') {
+                          sampleText = 'Contenu textuel principal';
+                        } else {
+                          sampleText = `Éléments ${type.name} détectés`;
+                        }
+                      }
+                      
+                      const isSelected = selectedScrapableTypes.includes(type.type);
+                      const isExpanded = expandedScrapable === type.type;
+                      
+                      return (
+                        <div
+                          key={`scrapable-${index}`}
+                          className={`content-type-card ${isSelected ? 'selected' : ''}`}
+                          onClick={() => {
+                            if (isSelected) {
+                              setSelectedScrapableTypes(prev => prev.filter(t => t !== type.type));
+                            } else {
+                              setSelectedScrapableTypes(prev => [...prev, type.type]);
+                            }
+                          }}
+                          style={{ cursor: 'pointer' }}
+                        >
+                          <div className="checkbox-indicator"></div>
+                          <span className="material-icons content-icon">{type.icon}</span>
+                          <div className="content-title">{type.name}</div>
+                          <div className="content-description">{type.description}</div>
+                          <div className="content-count" style={{ fontSize: '0.85rem' }}>
+                            {type.count || 0} éléments · Confiance: {Math.round(type.confidence * 100)}%
+                          </div>
+                          <div 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setExpandedScrapable(isExpanded ? null : type.type);
+                            }}
+                            style={{ 
+                              marginTop: '0.5rem',
+                              padding: '0.5rem',
+                              background: 'rgba(255,255,255,0.05)',
+                              borderRadius: '4px',
+                              fontSize: '0.75rem',
+                              color: 'var(--text-muted)',
+                              maxHeight: isExpanded ? '200px' : '60px',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              cursor: 'zoom-in',
+                              transition: 'max-height 0.3s ease'
+                            }}
+                          >
+                            <div style={{ marginBottom: '0.25rem', fontWeight: 'bold', fontSize: '0.7rem', opacity: 0.7 }}>
+                              Aperçu {isExpanded ? '(cliquer pour réduire)' : '(cliquer pour agrandir)'}
+                            </div>
+                            {sampleText.substring(0, isExpanded ? 500 : 100)}{sampleText.length > (isExpanded ? 500 : 100) ? '...' : ''}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  
+                  {scrapableContent.rejected_types && scrapableContent.rejected_types.length > 0 && (
+                    <details style={{ marginTop: '1rem' }}>
+                      <summary style={{ 
+                        cursor: 'pointer',
+                        padding: '0.5rem',
+                        fontSize: '0.9rem',
+                        color: 'var(--text-muted)'
+                      }}>
+                        Types rejetés ({scrapableContent.rejected_types.length})
+                      </summary>
+                      <div style={{ 
+                        marginTop: '0.5rem',
+                        padding: '1rem',
+                        background: 'rgba(255,0,0,0.05)',
+                        borderRadius: '6px',
+                        fontSize: '0.85rem'
+                      }}>
+                        {scrapableContent.rejected_types.map((type, idx) => (
+                          <div key={idx} style={{ marginBottom: '0.5rem' }}>
+                            <strong>{type.name}</strong> - Confiance trop faible ({Math.round(type.confidence * 100)}%)
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  )}
+                </div>
+              )}
+              
+              {/* Advanced Options */}
+              <div className="advanced-section">
+                <button
+                  className={`advanced-toggle-btn ${showAdvanced ? 'active' : ''}`}
+                  onClick={() => setShowAdvanced(!showAdvanced)}
+                >
+                  <span>⚙️ Options avancées (pour utilisateurs expérimentés)</span>
+                  <span className="toggle-icon">▼</span>
+                </button>
+                
+                <div className={`advanced-content ${showAdvanced ? 'expanded' : ''}`}>
+                  <div className="advanced-options-grid">
+                    <div className="option-group">
+                      <label className="option-label">Profondeur de navigation</label>
+                      <select
+                        className="option-select"
+                        value={advancedOptions.depth}
+                        onChange={(e) => setAdvancedOptions({...advancedOptions, depth: e.target.value})}
+                      >
+                        <option value="1">1 niveau (page actuelle)</option>
+                        <option value="2">2 niveaux (pages liées)</option>
+                        <option value="3">3 niveaux (navigation profonde)</option>
+                        <option value="unlimited">Illimité</option>
+                      </select>
+                    </div>
+                    
+                    <div className="option-group">
+                      <label className="option-label">Délai entre requêtes (ms)</label>
+                      <input
+                        type="number"
+                        className="option-input"
+                        value={advancedOptions.delay}
+                        onChange={(e) => setAdvancedOptions({...advancedOptions, delay: e.target.value})}
+                        placeholder="500"
+                      />
+                    </div>
+                    
+                    <div className="option-group">
+                      <label className="option-label">User Agent</label>
+                      <select
+                        className="option-select"
+                        value={advancedOptions.userAgent}
+                        onChange={(e) => setAdvancedOptions({...advancedOptions, userAgent: e.target.value})}
+                      >
+                        <option>Chrome (Desktop)</option>
+                        <option>Firefox (Desktop)</option>
+                        <option>Safari (Desktop)</option>
+                        <option>Mobile (iOS)</option>
+                        <option>Mobile (Android)</option>
+                      </select>
+                    </div>
+                    
+                    <div className="option-group">
+                      <label className="option-label">Timeout (secondes)</label>
+                      <input
+                        type="number"
+                        className="option-input"
+                        value={advancedOptions.timeout}
+                        onChange={(e) => setAdvancedOptions({...advancedOptions, timeout: e.target.value})}
+                        placeholder="30"
                       />
                     </div>
                   </div>
-                </div>
-
-                <div className="config-section">
-                  <h4><i className="fas fa-clock"></i> Planification</h4>
-                  <div className="config-row">
-                    <div className="config-field">
-                      <label>Fréquence</label>
-                      <select 
-                        value={scrapingConfig.schedule}
-                        onChange={(e) => setScrapingConfig(prev => ({ 
-                          ...prev, 
-                          schedule: e.target.value 
-                        }))}
-                      >
-                        <option value="manual">Manuel (une seule fois)</option>
-                        <option value="daily">Quotidien</option>
-                        <option value="weekly">Hebdomadaire</option>
-                                                <option value="monthly">Mensuel</option>
-                      </select>
-                    </div>
+                  
+                  {/* Custom Selector Input */}
+                  <div className="selector-input-section">
+                    <div className="selector-title">🎯 Sélecteurs CSS personnalisés (optionnel)</div>
+                    <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
+                      Pour les utilisateurs avancés : spécifiez vos propres sélecteurs CSS pour extraire des données précises.
+                    </p>
                     
-                    <div className="config-field">
-                      <label>Profondeur de navigation</label>
-                      <select 
-                        value={scrapingConfig.depth}
-                        onChange={(e) => setScrapingConfig(prev => ({ 
-                          ...prev, 
-                          depth: parseInt(e.target.value) 
-                        }))}
-                      >
-                        <option value="1">Niveau 1 (page actuelle)</option>
-                        <option value="2">Niveau 2 (liens directs)</option>
-                        <option value="3">Niveau 3 (2 niveaux de profondeur)</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="config-section">
-                  <h4><i className="fas fa-download"></i> Options d'export</h4>
-                  <div className="config-row">
-                    <div className="config-field">
-                      <label>Format de sauvegarde</label>
-                      <select 
-                        value={scrapingConfig.saveFormat}
-                        onChange={(e) => setScrapingConfig(prev => ({ 
-                          ...prev, 
-                          saveFormat: e.target.value 
-                        }))}
-                      >
-                        <option value="json">JSON (recommandé)</option>
-                        <option value="csv">CSV</option>
-                        <option value="excel">Excel</option>
-                        <option value="both">JSON + CSV</option>
-                      </select>
-                    </div>
-                    
-                    {targetInfo.type === 'url' && (
-                      <div className="config-field">
-                        <label>Pagination automatique</label>
-                        <div className="toggle-field">
-                          <div 
-                            className={`toggle-switch ${scrapingConfig.pagination ? 'active' : ''}`}
-                            onClick={() => setScrapingConfig(prev => ({ 
-                              ...prev, 
-                              pagination: !prev.pagination 
-                            }))}
+                    <div className="selector-fields">
+                      {customSelectors.map((selector, index) => (
+                        <div key={index} className="selector-field">
+                          <input
+                            type="text"
+                            className="field-input"
+                            placeholder="Nom du champ"
+                            value={selector.name}
+                            onChange={(e) => updateCustomSelector(index, 'name', e.target.value)}
+                          />
+                          <input
+                            type="text"
+                            className="field-input"
+                            placeholder="Sélecteur CSS"
+                            value={selector.selector}
+                            onChange={(e) => updateCustomSelector(index, 'selector', e.target.value)}
+                          />
+                          <button
+                            className="btn-remove"
+                            onClick={() => removeCustomSelector(index)}
                           >
-                            <div className="toggle-slider"></div>
-                          </div>
-                          <span>Détecter et suivre la pagination</span>
+                            ✕
+                          </button>
                         </div>
-                      </div>
-                    )}
-                    
-                    {targetInfo.type === 'url' && scrapingConfig.pagination && (
-                      <div className="config-field">
-                        <label>Pages maximum</label>
-                        <input 
-                          type="number" 
-                          min="1" 
-                          max="100"
-                          value={scrapingConfig.maxPages}
-                          onChange={(e) => setScrapingConfig(prev => ({ 
-                            ...prev, 
-                            maxPages: parseInt(e.target.value) 
-                          }))}
-                        />
-                        <small className="field-hint">Limite pour éviter un scraping infini</small>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Configuration spécifique au type d'entrée */}
-                <div className="config-section">
-                  <h4><i className="fas fa-sliders-h"></i> Paramètres spécifiques</h4>
-                  <div className="config-row">
-                    {targetInfo.type === 'selector' && (
-                      <div className="config-field">
-                        <label>Mode de sélection</label>
-                        <select 
-                          value={scrapingConfig.selectionMode || 'multiple'}
-                          onChange={(e) => setScrapingConfig(prev => ({ 
-                            ...prev, 
-                            selectionMode: e.target.value 
-                          }))}
-                        >
-                          <option value="multiple">Tous les éléments correspondants</option>
-                          <option value="first">Premier élément seulement</option>
-                          <option value="nth">Élément spécifique (n-ième)</option>
-                        </select>
-                      </div>
-                    )}
-                    
-                    {targetInfo.type === 'html' && (
-                      <div className="config-field">
-                        <label>Mode d'extraction HTML</label>
-                        <select 
-                          value={scrapingConfig.htmlMode || 'structure'}
-                          onChange={(e) => setScrapingConfig(prev => ({ 
-                            ...prev, 
-                            htmlMode: e.target.value 
-                          }))}
-                        >
-                          <option value="structure">Structure complète</option>
-                          <option value="content">Contenu texte seulement</option>
-                          <option value="both">Structure + contenu</option>
-                        </select>
-                      </div>
-                    )}
-                    
-                    {/* Adaptateur spécifique au site */}
-                    <div className="config-field">
-                      <label>Adaptateur de scraping</label>
-                      <select 
-                        value={scrapingConfig.adapter || 'auto'}
-                        onChange={(e) => setScrapingConfig(prev => ({ 
-                          ...prev, 
-                          adapter: e.target.value 
-                        }))}
-                      >
-                        <option value="auto">Auto-détection</option>
-                        <option value="ecommerce">E-commerce (Amazon, eBay)</option>
-                        <option value="template">Templates (ThemeForest)</option>
-                        <option value="blog">Blogs (Medium, WordPress)</option>
-                        <option value="github">GitHub</option>
-                        <option value="news">Actualités</option>
-                        <option value="generic">Générique</option>
-                      </select>
-                      <small className="field-hint">
-                        {targetInfo.type === 'url' 
-                          ? `Détecté: ${detectSiteTypeFromUrl(targetInfo.input)}`
-                          : 'Sélectionnez manuellement si besoin'}
-                      </small>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Options avancées */}
-                <div className="config-section">
-                  <h4><i className="fas fa-cogs"></i> Options avancées</h4>
-                  <div className="config-row">
-                    <div className="config-field">
-                      <label>Délai entre les requêtes</label>
-                      <select 
-                        value={scrapingConfig.delay || 'normal'}
-                        onChange={(e) => setScrapingConfig(prev => ({ 
-                          ...prev, 
-                          delay: e.target.value 
-                        }))}
-                      >
-                        <option value="fast">Rapide (100ms)</option>
-                        <option value="normal">Normal (500ms)</option>
-                        <option value="slow">Lent (1s)</option>
-                        <option value="very-slow">Très lent (2s)</option>
-                      </select>
-                      <small className="field-hint">Pour éviter le blocage IP</small>
+                      ))}
                     </div>
                     
-                    <div className="config-field">
-                      <label>Proxy</label>
-                      <div className="toggle-field">
-                        <div 
-                          className={`toggle-switch ${scrapingConfig.useProxy || false ? 'active' : ''}`}
-                          onClick={() => setScrapingConfig(prev => ({ 
-                            ...prev, 
-                            useProxy: !prev.useProxy 
-                          }))}
-                        >
-                          <div className="toggle-slider"></div>
-                        </div>
-                        <span>Utiliser un proxy rotatif</span>
-                      </div>
-                    </div>
-                    
-                    {scrapingConfig.useProxy && (
-                      <div className="config-field">
-                        <label>Service proxy</label>
-                        <select 
-                          value={scrapingConfig.proxyService || 'none'}
-                          onChange={(e) => setScrapingConfig(prev => ({ 
-                            ...prev, 
-                            proxyService: e.target.value 
-                          }))}
-                        >
-                          <option value="none">Aucun (proxy local)</option>
-                          <option value="scrapingbee">ScrapingBee</option>
-                          <option value="scraperapi">ScraperAPI</option>
-                          <option value="brightdata">Bright Data</option>
-                        </select>
-                      </div>
-                    )}
+                    <button className="btn-add-field" onClick={addCustomSelector}>
+                      ➕ Ajouter un champ personnalisé
+                    </button>
                   </div>
                 </div>
               </div>
-            </section>
-
-            {/* Aperçu des données */}
-            <section className="card">
-              <div className="card-header">
-                <h3><i className="fas fa-eye"></i> Aperçu des données à scraper</h3>
-              </div>
-              <div className="data-preview">
-                <div className="preview-header">
-                  <div className="preview-stats">
-                    <div className="stat">
-                      <i className="fas fa-database"></i>
-                      <span>{estimatedData.toLocaleString()} éléments estimés</span>
+              
+              {/* Storage Format Selection */}
+              <div className="storage-section">
+                <h3 className="section-title">
+                  <span>💾</span>
+                  Format de stockage
+                </h3>
+                <p className="card-description" style={{ marginBottom: '1.5rem' }}>
+                  Choisissez le format dans lequel vous souhaitez recevoir vos données extraites.
+                </p>
+                
+                <div className="format-grid">
+                  {formats.map((format) => (
+                    <div
+                      key={format.id}
+                      className={`format-card ${selectedFormat === format.id ? 'selected' : ''}`}
+                      onClick={() => setSelectedFormat(format.id)}
+                    >
+                      <div className="format-icon">{format.icon}</div>
+                      <div className="format-name">{format.name}</div>
                     </div>
-                    <div className="stat">
-                      <i className="fas fa-clock"></i>
-                      <span>Temps estimé: {calculateEstimatedTime()} secondes</span>
-                    </div>
-                    <div className="stat">
-                      <i className="fas fa-hdd"></i>
-                      <span>Taille estimée: {calculateEstimatedSize()} MB</span>
-                    </div>
-                  </div>
+                  ))}
                 </div>
                 
-                <div className="preview-content">
-                  <h4>Structure des données générée :</h4>
-                  <pre className="json-preview">
-                    {generateDataPreview()}
-                  </pre>
-                  <small className="preview-note">
-                    Ceci est une prévisualisation basée sur votre configuration. 
-                    Les données réelles peuvent varier.
-                  </small>
-                </div>
-              </div>
-            </section>
-
-            {/* Actions */}
-            <div className="analysis-actions">
-              <button 
-                className="btn btn-primary"
-                onClick={startScraping}
-                disabled={!scrapingConfig.name.trim() || selectedCount === 0}
-              >
-                <i className="fas fa-play"></i>
-                Démarrer le Scraping
-              </button>
-              
-              <button 
-                className="btn btn-secondary"
-                onClick={exportConfig}
-              >
-                <i className="fas fa-file-export"></i>
-                Exporter la Configuration
-              </button>
-              
-              <button 
-                className="btn btn-secondary"
-                onClick={() => {
-                  setTargetInfo(prev => ({ ...prev, input: '', title: '' }));
-                  setAnalysis({ isLoading: false, isComplete: false, progress: 0, error: null });
-                  setDetectedElements([]);
-                }}
-              >
-                <i className="fas fa-redo"></i>
-                Nouvelle Analyse
-              </button>
-              
-              <Link to="/dashboard" className="btn btn-secondary">
-                <i className="fas fa-arrow-left"></i>
-                Retour au Dashboard
-              </Link>
-            </div>
-          </>
-        )}
-
-        {/* État vide */}
-        {!analysis.isLoading && !analysis.isComplete && (
-          <section className="card">
-            <div className="empty-state">
-              <div className="empty-icon">
-                <i className="fas fa-search"></i>
-              </div>
-              <h3>Prêt à analyser</h3>
-              <p>
-                {targetInfo.type === 'selector' 
-                  ? 'Entrez un sélecteur CSS pour analyser les éléments correspondants'
-                  : targetInfo.type === 'html'
-                  ? 'Collez du HTML brut à analyser'
-                  : 'Entrez une URL pour analyser le site web'}
-              </p>
-              
-              <div className="example-inputs">
-                <h4>Exemples :</h4>
-                <div className="example-grid">
-                  {targetInfo.type === 'url' && (
-                    <>
-                      <button 
-                        className="example-btn"
-                        onClick={() => {
-                          setTargetInfo(prev => ({ ...prev, input: 'https://www.amazon.com/electronics' }));
-                        }}
-                      >
-                        <i className="fas fa-shopping-cart"></i>
-                        Amazon Electronics
-                      </button>
-                      <button 
-                        className="example-btn"
-                        onClick={() => {
-                          setTargetInfo(prev => ({ ...prev, input: 'https://themeforest.net' }));
-                        }}
-                      >
-                        <i className="fas fa-palette"></i>
-                        ThemeForest
-                      </button>
-                      <button 
-                        className="example-btn"
-                        onClick={() => {
-                          setTargetInfo(prev => ({ ...prev, input: 'https://medium.com' }));
-                        }}
-                      >
-                        <i className="fas fa-blog"></i>
-                        Medium
-                      </button>
-                    </>
-                  )}
-                  
-                  {targetInfo.type === 'selector' && (
-                    <>
-                      <button 
-                        className="example-btn"
-                        onClick={() => {
-                          setTargetInfo(prev => ({ ...prev, input: '.product-card' }));
-                        }}
-                      >
-                        <i className="fas fa-box"></i>
-                        Produits E-commerce
-                      </button>
-                      <button 
-                        className="example-btn"
-                        onClick={() => {
-                          setTargetInfo(prev => ({ ...prev, input: 'article' }));
-                        }}
-                      >
-                        <i className="fas fa-newspaper"></i>
-                        Articles de blog
-                      </button>
-                      <button 
-                        className="example-btn"
-                        onClick={() => {
-                          setTargetInfo(prev => ({ ...prev, input: '#price' }));
-                        }}
-                      >
-                        <i className="fas fa-tag"></i>
-                        Prix
-                      </button>
-                    </>
-                  )}
-                  
-                  {targetInfo.type === 'html' && (
-                    <>
-                      <button 
-                        className="example-btn"
-                        onClick={() => {
-                          setTargetInfo(prev => ({ 
-                            ...prev, 
-                            input: '<div class="product"><h3>iPhone 15 Pro</h3><p class="price">1099€</p></div>' 
-                          }));
-                        }}
-                      >
-                        <i className="fas fa-mobile"></i>
-                        Produit HTML
-                      </button>
-                      <button 
-                        className="example-btn"
-                        onClick={() => {
-                          setTargetInfo(prev => ({ 
-                            ...prev, 
-                            input: '<article><h2>Titre Article</h2><p>Contenu intéressant...</p></article>' 
-                          }));
-                        }}
-                      >
-                        <i className="fas fa-file-alt"></i>
-                        Article HTML
-                      </button>
-                    </>
-                  )}
+                {/* Option pour inclure les images en ZIP */}
+                <div className="images-zip-option">
+                  <label className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={includeImagesZip}
+                      onChange={(e) => setIncludeImagesZip(e.target.checked)}
+                    />
+                    <span className="checkbox-custom"></span>
+                    <span className="checkbox-text">
+                      🖼️ Inclure les images en ZIP (téléchargement séparé)
+                    </span>
+                  </label>
                 </div>
               </div>
               
-              <div className="empty-actions">
-                <button 
-                  className="btn btn-primary"
-                  onClick={() => navigate('/dashboard')}
-                >
-                  <i className="fas fa-arrow-left"></i>
-                  Retour au Dashboard
-                </button>
-                <button 
-                  className="btn btn-secondary"
+              {/* Action Buttons */}
+              <div className="action-buttons">
+                <button
+                  className="btn-secondary"
                   onClick={() => {
-                    const types = ['url', 'selector', 'html'];
-                    const nextType = types[(types.indexOf(targetInfo.type) + 1) % types.length];
-                    setTargetInfo(prev => ({ ...prev, type: nextType, input: '' }));
+                    setShowResults(false);
+                    setCurrentStep(1);
                   }}
                 >
-                  <i className="fas fa-exchange-alt"></i>
-                  Changer de type
+                  ← Retour
+                </button>
+                <button className="btn-primary" onClick={handleStartScraping}>
+                  <span>🚀</span>
+                  Lancer le scraping
                 </button>
               </div>
             </div>
-          </section>
+          </div>
         )}
       </main>
+      
+      {/* Format Configuration Modal */}
+      {showFormatModal && (
+        <div className="modal-overlay" onClick={() => setShowFormatModal(false)}>
+          <div className="modal-content format-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3 className="modal-title">Format</h3>
+              <button className="modal-close" onClick={() => setShowFormatModal(false)}>
+                ✕
+              </button>
+            </div>
+            
+            <div className="modal-body">
+              {/* Format Options */}
+              <div className="format-options-list">
+                {/* Markdown */}
+                <div className="format-option">
+                  <input
+                    type="checkbox"
+                    id="format-markdown"
+                    checked={outputFormats.markdown}
+                    onChange={(e) => setOutputFormats({...outputFormats, markdown: e.target.checked})}
+                  />
+                  <label htmlFor="format-markdown" className="format-label">
+                    <span className="format-icon">📝</span>
+                    <span className="format-name">Markdown</span>
+                  </label>
+                </div>
+                
+                {/* Summary */}
+                <div className="format-option">
+                  <input
+                    type="checkbox"
+                    id="format-summary"
+                    checked={outputFormats.summary}
+                    onChange={(e) => setOutputFormats({...outputFormats, summary: e.target.checked})}
+                  />
+                  <label htmlFor="format-summary" className="format-label">
+                    <span className="format-icon">≡</span>
+                    <span className="format-name">Summary</span>
+                  </label>
+                </div>
+                
+                {/* Links */}
+                <div className="format-option">
+                  <input
+                    type="checkbox"
+                    id="format-links"
+                    checked={outputFormats.links}
+                    onChange={(e) => setOutputFormats({...outputFormats, links: e.target.checked})}
+                  />
+                  <label htmlFor="format-links" className="format-label">
+                    <span className="format-icon">🔗</span>
+                    <span className="format-name">Links</span>
+                  </label>
+                </div>
+                
+                {/* HTML */}
+                <div className="format-option">
+                  <input
+                    type="checkbox"
+                    id="format-html"
+                    checked={outputFormats.html}
+                    onChange={(e) => setOutputFormats({...outputFormats, html: e.target.checked})}
+                  />
+                  <label htmlFor="format-html" className="format-label">
+                    <span className="format-icon">&lt;/&gt;</span>
+                    <span className="format-name">HTML</span>
+                  </label>
+                  {outputFormats.html && (
+                    <div className="format-sub-options">
+                      <button
+                        className={`sub-option-btn ${htmlMode === 'cleaned' ? 'active' : ''}`}
+                        onClick={() => setHtmlMode('cleaned')}
+                      >
+                        Cleaned
+                      </button>
+                      <button
+                        className={`sub-option-btn ${htmlMode === 'raw' ? 'active' : ''}`}
+                        onClick={() => setHtmlMode('raw')}
+                      >
+                        Raw
+                      </button>
+                    </div>
+                  )}
+                </div>
+                
+                {/* Screenshot */}
+                <div className="format-option">
+                  <input
+                    type="checkbox"
+                    id="format-screenshot"
+                    checked={outputFormats.screenshot}
+                    onChange={(e) => setOutputFormats({...outputFormats, screenshot: e.target.checked})}
+                  />
+                  <label htmlFor="format-screenshot" className="format-label">
+                    <span className="format-icon">📸</span>
+                    <span className="format-name">Screenshot</span>
+                  </label>
+                  {outputFormats.screenshot && (
+                    <div className="format-sub-options">
+                      <button
+                        className={`sub-option-btn ${screenshotMode === 'viewport' ? 'active' : ''}`}
+                        onClick={() => setScreenshotMode('viewport')}
+                      >
+                        Viewport
+                      </button>
+                      <button
+                        className={`sub-option-btn ${screenshotMode === 'fullpage' ? 'active' : ''}`}
+                        onClick={() => setScreenshotMode('fullpage')}
+                      >
+                        Full Page
+                      </button>
+                    </div>
+                  )}
+                </div>
+                
+                {/* JSON */}
+                <div className="format-option">
+                  <input
+                    type="checkbox"
+                    id="format-json"
+                    checked={outputFormats.json}
+                    onChange={(e) => setOutputFormats({...outputFormats, json: e.target.checked})}
+                  />
+                  <label htmlFor="format-json" className="format-label">
+                    <span className="format-icon">{'{}'}</span>
+                    <span className="format-name">JSON</span>
+                  </label>
+                  <button className="edit-options-btn">✏️ Edit options</button>
+                </div>
+                
+                {/* Branding */}
+                <div className="format-option">
+                  <input
+                    type="checkbox"
+                    id="format-branding"
+                    checked={outputFormats.branding}
+                    onChange={(e) => setOutputFormats({...outputFormats, branding: e.target.checked})}
+                  />
+                  <label htmlFor="format-branding" className="format-label">
+                    <span className="format-icon">🎨</span>
+                    <span className="format-name">Branding</span>
+                  </label>
+                </div>
+                
+                {/* Images */}
+                <div className="format-option">
+                  <input
+                    type="checkbox"
+                    id="format-images"
+                    checked={outputFormats.images}
+                    onChange={(e) => setOutputFormats({...outputFormats, images: e.target.checked})}
+                  />
+                  <label htmlFor="format-images" className="format-label">
+                    <span className="format-icon">🖼️</span>
+                    <span className="format-name">Images</span>
+                  </label>
+                </div>
+              </div>
+              
+              {/* Format Summary */}
+              <div className="format-summary">
+                <div className="summary-label">Formats sélectionnés:</div>
+                <div className="summary-count">
+                  {Object.values(outputFormats).filter(v => v).length} / {Object.keys(outputFormats).length}
+                </div>
+              </div>
+            </div>
+            
+            <div className="modal-footer">
+              <button className="btn-secondary" onClick={() => setShowFormatModal(false)}>
+                Annuler
+              </button>
+              <button className="btn-primary" onClick={() => setShowFormatModal(false)}>
+                ✓ Confirmer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
-
-  // Fonctions utilitaires additionnelles
-  function calculateEstimatedTime() {
-    const baseTime = targetInfo.type === 'url' 
-      ? estimatedData * (scrapingConfig.delay === 'fast' ? 0.1 : 
-                        scrapingConfig.delay === 'normal' ? 0.5 : 
-                        scrapingConfig.delay === 'slow' ? 1 : 2)
-      : 0.5;
-    
-    return Math.max(1, Math.round(baseTime));
-  }
-
-  function calculateEstimatedSize() {
-    const bytesPerElement = targetInfo.type === 'html' ? 500 : 200;
-    const totalBytes = estimatedData * bytesPerElement;
-    return (totalBytes / (1024 * 1024)).toFixed(2);
-  }
-
-  function generateDataPreview() {
-    const selectedElements = detectedElements.filter(el => el.isSelected);
-    
-    if (selectedElements.length === 0) {
-      return JSON.stringify({ message: "Aucun élément sélectionné" }, null, 2);
-    }
-    
-    const preview = {
-      metadata: {
-        project: scrapingConfig.name,
-        type: targetInfo.type,
-        url: targetInfo.type === 'url' ? targetInfo.input : undefined,
-        selector: targetInfo.type === 'selector' ? targetInfo.input : undefined,
-        timestamp: new Date().toISOString(),
-        elementsCount: estimatedData
-      },
-      data: selectedElements.map(el => ({
-        name: el.name,
-        selector: el.selector,
-        count: el.count,
-        confidence: el.confidence,
-        sampleData: generateSampleData(el.name, targetInfo.type)
-      }))
-    };
-    
-    return JSON.stringify(preview, null, 2);
-  }
-
-  function generateSampleData(elementName, type) {
-    const samples = {
-      'Produits': ['iPhone 15 Pro', 'Samsung Galaxy S24', 'Google Pixel 8'],
-      'Prix': ['999€', '1,299€', '899€'],
-      'Images': ['product-image-1.jpg', 'product-image-2.jpg'],
-      'Articles': ['Introduction à React', 'Guide de scraping web', 'Nouvelles fonctionnalités'],
-      'Titres': ['Titre principal', 'Sous-titre important', 'Section 1'],
-      'Auteurs': ['Jean Dupont', 'Marie Martin', 'Alexandre Bernard'],
-      'Dates': ['2024-01-15', '2024-01-14', '2024-01-13'],
-      'Répositories': ['react', 'vue', 'next.js'],
-      'Stars': ['245', '189', '542'],
-      'Templates': ['Business Pro', 'Creative Portfolio', 'E-commerce Suite']
-    };
-    
-    return samples[elementName] || ['Donnée 1', 'Donnée 2', 'Donnée 3'];
-  }
-};
-
-export default Analysis;
+}

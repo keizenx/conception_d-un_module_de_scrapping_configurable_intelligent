@@ -7,7 +7,9 @@ def fetch_html(url: str, timeout_seconds: float = 20.0) -> str:
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     }
 
-    with httpx.Client(follow_redirects=True, timeout=timeout_seconds, headers=headers) as client:
+    with httpx.Client(
+        follow_redirects=True, timeout=timeout_seconds, headers=headers
+    ) as client:
         resp = client.get(url)
         resp.raise_for_status()
         return resp.text

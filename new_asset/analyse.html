@@ -1,0 +1,1298 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analyse - SCRAPER PRO</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #FF4D00;
+            --primary-dark: #CC3D00;
+            --accent: #00E5FF;
+            --success: #00FF88;
+            --warning: #FFB800;
+            --error: #FF3B3B;
+            --bg-dark: #0A0A0F;
+            --bg-darker: #050508;
+            --bg-card: #141419;
+            --bg-hover: #1A1A20;
+            --text-primary: #FFFFFF;
+            --text-secondary: #A0A0B0;
+            --text-muted: #606070;
+            --border: rgba(255, 77, 0, 0.1);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            overflow-x: hidden;
+        }
+        
+        .app-container {
+            display: flex;
+            min-height: 100vh;
+        }
+        
+        /* Sidebar */
+        .sidebar {
+            width: 280px;
+            background: var(--bg-darker);
+            border-right: 1px solid var(--border);
+            padding: 2rem 0;
+            position: fixed;
+            height: 100vh;
+            overflow-y: auto;
+        }
+        
+        .logo {
+            padding: 0 2rem;
+            margin-bottom: 3rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 1.8rem;
+            letter-spacing: 2px;
+            color: var(--primary);
+        }
+        
+        .logo-icon {
+            width: 36px;
+            height: 36px;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+        }
+        
+        .nav-section {
+            margin-bottom: 2rem;
+        }
+        
+        .nav-title {
+            padding: 0 2rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 0.5rem;
+        }
+        
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 0.875rem 2rem;
+            color: var(--text-secondary);
+            text-decoration: none;
+            transition: all 0.3s ease;
+            border-left: 3px solid transparent;
+            font-weight: 500;
+        }
+        
+        .nav-item:hover {
+            background: rgba(255, 77, 0, 0.05);
+            color: var(--text-primary);
+            border-left-color: var(--primary);
+        }
+        
+        .nav-item.active {
+            background: rgba(255, 77, 0, 0.1);
+            color: var(--primary);
+            border-left-color: var(--primary);
+        }
+        
+        .nav-icon {
+            font-size: 1.25rem;
+            width: 24px;
+            text-align: center;
+        }
+        
+        /* Main Content */
+        .main-content {
+            margin-left: 280px;
+            flex: 1;
+            padding: 2rem 3rem;
+            max-width: 1400px;
+        }
+        
+        /* Header */
+        .page-header {
+            margin-bottom: 3rem;
+        }
+        
+        .page-title {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 2.5rem;
+            letter-spacing: 2px;
+            margin-bottom: 0.5rem;
+        }
+        
+        .page-subtitle {
+            color: var(--text-muted);
+            font-size: 1.1rem;
+        }
+        
+        /* Step Indicator */
+        .step-indicator {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 3rem;
+            position: relative;
+        }
+        
+        .step-indicator::before {
+            content: '';
+            position: absolute;
+            top: 20px;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: var(--border);
+            z-index: 0;
+        }
+        
+        .step-progress {
+            position: absolute;
+            top: 20px;
+            left: 0;
+            height: 2px;
+            background: linear-gradient(90deg, var(--primary), var(--accent));
+            transition: width 0.5s ease;
+            z-index: 1;
+        }
+        
+        .step {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.75rem;
+            position: relative;
+            z-index: 2;
+        }
+        
+        .step-number {
+            width: 40px;
+            height: 40px;
+            background: var(--bg-card);
+            border: 2px solid var(--border);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            transition: all 0.3s ease;
+        }
+        
+        .step.active .step-number {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            border-color: var(--primary);
+            box-shadow: 0 0 20px rgba(255, 77, 0, 0.5);
+        }
+        
+        .step.completed .step-number {
+            background: rgba(0, 255, 136, 0.2);
+            border-color: var(--success);
+            color: var(--success);
+        }
+        
+        .step-label {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+        
+        .step.active .step-label {
+            color: var(--primary);
+            font-weight: 600;
+        }
+        
+        /* Card */
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 2.5rem;
+            margin-bottom: 2rem;
+        }
+        
+        .card-header {
+            margin-bottom: 2rem;
+        }
+        
+        .card-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        
+        .card-description {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+            line-height: 1.6;
+        }
+        
+        /* URL Input Section */
+        .url-input-section {
+            margin-bottom: 2rem;
+        }
+        
+        .input-label {
+            display: block;
+            font-size: 0.95rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: var(--text-secondary);
+        }
+        
+        .url-input-wrapper {
+            position: relative;
+            margin-bottom: 1.5rem;
+        }
+        
+        .url-icon {
+            position: absolute;
+            left: 1.25rem;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 1.25rem;
+            color: var(--text-muted);
+        }
+        
+        .url-input {
+            width: 100%;
+            padding: 1.25rem 1.25rem 1.25rem 3.5rem;
+            background: var(--bg-darker);
+            border: 2px solid var(--border);
+            border-radius: 12px;
+            color: var(--text-primary);
+            font-size: 1rem;
+            font-family: 'JetBrains Mono', monospace;
+            transition: all 0.3s ease;
+        }
+        
+        .url-input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 4px rgba(255, 77, 0, 0.1);
+        }
+        
+        .url-input::placeholder {
+            color: var(--text-muted);
+        }
+        
+        .example-urls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .example-chip {
+            padding: 0.5rem 1rem;
+            background: rgba(255, 77, 0, 0.05);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .example-chip:hover {
+            background: rgba(255, 77, 0, 0.1);
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+        
+        /* Include Subdomains Toggle */
+        .subdomain-option {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1.25rem;
+            background: var(--bg-darker);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            margin-bottom: 1.5rem;
+        }
+        
+        .option-info {
+            flex: 1;
+        }
+        
+        .option-title {
+            font-size: 0.95rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+        
+        .option-description {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            line-height: 1.5;
+        }
+        
+        .option-example {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            color: var(--accent);
+            margin-top: 0.5rem;
+        }
+        
+        /* Toggle Switch */
+        .toggle-switch {
+            position: relative;
+            width: 56px;
+            height: 30px;
+            background: var(--bg-card);
+            border: 2px solid var(--border);
+            border-radius: 15px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .toggle-switch::before {
+            content: '';
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 22px;
+            height: 22px;
+            background: var(--text-muted);
+            border-radius: 50%;
+            transition: all 0.3s ease;
+        }
+        
+        input[type="checkbox"]:checked + .toggle-switch {
+            background: rgba(255, 77, 0, 0.2);
+            border-color: var(--primary);
+        }
+        
+        input[type="checkbox"]:checked + .toggle-switch::before {
+            left: 28px;
+            background: var(--primary);
+        }
+        
+        input[type="checkbox"] {
+            display: none;
+        }
+        
+        /* Analyze Button */
+        .btn-analyze {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: white;
+            padding: 1.25rem 3rem;
+            border: none;
+            border-radius: 12px;
+            font-weight: 700;
+            font-size: 1.1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 20px rgba(255, 77, 0, 0.4);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+            width: 100%;
+        }
+        
+        .btn-analyze:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 30px rgba(255, 77, 0, 0.6);
+        }
+        
+        .btn-analyze:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        /* Analysis Results Section */
+        .analysis-results {
+            display: none;
+        }
+        
+        .analysis-results.visible {
+            display: block;
+        }
+        
+        .site-info-card {
+            background: var(--bg-darker);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        
+        .site-info-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1.5rem;
+        }
+        
+        .info-item {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        
+        .info-label {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .info-value {
+            font-size: 1.1rem;
+            font-weight: 600;
+            font-family: 'JetBrains Mono', monospace;
+        }
+        
+        /* Detected Content Types */
+        .content-types-section {
+            margin-bottom: 2rem;
+        }
+        
+        .section-title {
+            font-size: 1.25rem;
+            font-weight: 700;
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        
+        .content-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+        }
+        
+        .content-type-card {
+            padding: 1.5rem;
+            background: var(--bg-darker);
+            border: 2px solid var(--border);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+        
+        .content-type-card:hover {
+            background: var(--bg-hover);
+            border-color: rgba(255, 77, 0, 0.3);
+        }
+        
+        .content-type-card.selected {
+            background: rgba(255, 77, 0, 0.1);
+            border-color: var(--primary);
+        }
+        
+        .checkbox-indicator {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            width: 24px;
+            height: 24px;
+            border: 2px solid var(--border);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+        }
+        
+        .content-type-card.selected .checkbox-indicator {
+            background: var(--primary);
+            border-color: var(--primary);
+        }
+        
+        .checkbox-indicator::after {
+            content: '✓';
+            color: white;
+            font-weight: 700;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        
+        .content-type-card.selected .checkbox-indicator::after {
+            opacity: 1;
+        }
+        
+        .content-icon {
+            font-size: 2rem;
+            margin-bottom: 1rem;
+        }
+        
+        .content-title {
+            font-size: 1.05rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+        
+        .content-description {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            line-height: 1.5;
+            margin-bottom: 0.75rem;
+        }
+        
+        .content-count {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            color: var(--accent);
+            font-weight: 600;
+        }
+        
+        /* Advanced Options */
+        .advanced-section {
+            margin-bottom: 2rem;
+        }
+        
+        .advanced-toggle-btn {
+            width: 100%;
+            padding: 1.25rem;
+            background: var(--bg-darker);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            color: var(--text-primary);
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .advanced-toggle-btn:hover {
+            background: var(--bg-hover);
+            border-color: rgba(255, 77, 0, 0.3);
+        }
+        
+        .toggle-icon {
+            transition: transform 0.3s ease;
+        }
+        
+        .advanced-toggle-btn.active .toggle-icon {
+            transform: rotate(180deg);
+        }
+        
+        .advanced-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.5s ease;
+        }
+        
+        .advanced-content.expanded {
+            max-height: 2000px;
+        }
+        
+        .advanced-options-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1.5rem;
+            padding: 2rem 0 1rem;
+        }
+        
+        .option-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+        
+        .option-label {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+        }
+        
+        .option-input {
+            width: 100%;
+            padding: 0.875rem 1rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            color: var(--text-primary);
+            font-size: 0.95rem;
+            font-family: 'JetBrains Mono', monospace;
+            transition: all 0.3s ease;
+        }
+        
+        .option-input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(255, 77, 0, 0.1);
+        }
+        
+        .option-select {
+            width: 100%;
+            padding: 0.875rem 1rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            color: var(--text-primary);
+            font-size: 0.95rem;
+            cursor: pointer;
+        }
+        
+        /* Advanced Selector Input */
+        .selector-input-section {
+            margin-top: 1.5rem;
+            padding: 1.5rem;
+            background: var(--bg-card);
+            border: 1px dashed var(--border);
+            border-radius: 12px;
+        }
+        
+        .selector-title {
+            font-size: 0.95rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: var(--text-secondary);
+        }
+        
+        .selector-fields {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        
+        .selector-field {
+            display: grid;
+            grid-template-columns: 150px 1fr auto;
+            gap: 1rem;
+            align-items: center;
+        }
+        
+        .field-input {
+            padding: 0.75rem 1rem;
+            background: var(--bg-darker);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+        }
+        
+        .btn-remove {
+            padding: 0.5rem 1rem;
+            background: rgba(255, 59, 59, 0.1);
+            border: 1px solid var(--error);
+            border-radius: 8px;
+            color: var(--error);
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-remove:hover {
+            background: rgba(255, 59, 59, 0.2);
+        }
+        
+        .btn-add-field {
+            padding: 0.75rem 1.5rem;
+            background: rgba(0, 229, 255, 0.1);
+            border: 1px dashed var(--accent);
+            border-radius: 8px;
+            color: var(--accent);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 0.5rem;
+        }
+        
+        .btn-add-field:hover {
+            background: rgba(0, 229, 255, 0.2);
+        }
+        
+        /* Storage Format */
+        .storage-section {
+            margin-bottom: 2rem;
+        }
+        
+        .format-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1rem;
+        }
+        
+        .format-card {
+            padding: 1.25rem;
+            background: var(--bg-darker);
+            border: 2px solid var(--border);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-align: center;
+        }
+        
+        .format-card:hover {
+            background: var(--bg-hover);
+            border-color: rgba(255, 77, 0, 0.3);
+        }
+        
+        .format-card.selected {
+            background: rgba(255, 77, 0, 0.1);
+            border-color: var(--primary);
+        }
+        
+        .format-icon {
+            font-size: 2rem;
+            margin-bottom: 0.75rem;
+        }
+        
+        .format-name {
+            font-size: 0.95rem;
+            font-weight: 600;
+        }
+        
+        /* Action Buttons */
+        .action-buttons {
+            display: flex;
+            gap: 1rem;
+            margin-top: 2rem;
+        }
+        
+        .btn-secondary {
+            flex: 1;
+            padding: 1.25rem;
+            background: var(--bg-darker);
+            border: 2px solid var(--border);
+            border-radius: 12px;
+            color: var(--text-primary);
+            font-weight: 600;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-secondary:hover {
+            background: var(--bg-hover);
+            border-color: rgba(255, 77, 0, 0.3);
+        }
+        
+        .btn-primary {
+            flex: 2;
+            padding: 1.25rem;
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            border: none;
+            border-radius: 12px;
+            color: white;
+            font-weight: 700;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 20px rgba(255, 77, 0, 0.4);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 30px rgba(255, 77, 0, 0.6);
+        }
+        
+        @media (max-width: 1200px) {
+            .content-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .format-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+        
+        @media (max-width: 968px) {
+            .sidebar {
+                transform: translateX(-100%);
+            }
+            
+            .main-content {
+                margin-left: 0;
+            }
+            
+            .site-info-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .advanced-options-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .selector-field {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo">
+                <div class="logo-icon">⚡</div>
+                SCRAPER PRO
+            </div>
+            
+            <nav>
+                <div class="nav-section">
+                    <div class="nav-title">Principal</div>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">📊</span>
+                        Dashboard
+                    </a>
+                    <a href="#" class="nav-item active">
+                        <span class="nav-icon">🔍</span>
+                        Analyse
+                    </a>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">📈</span>
+                        Résultats
+                    </a>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">📋</span>
+                        Rapports
+                    </a>
+                </div>
+                
+                <div class="nav-section">
+                    <div class="nav-title">Outils</div>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">⚙️</span>
+                        Paramètres
+                    </a>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">📚</span>
+                        Documentation
+                    </a>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">💬</span>
+                        Support
+                    </a>
+                </div>
+            </nav>
+        </aside>
+        
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Header -->
+            <header class="page-header">
+                <h1 class="page-title">Nouvelle Analyse</h1>
+                <p class="page-subtitle">Laissez-nous analyser votre site web et nous vous montrerons ce que nous pouvons extraire</p>
+            </header>
+            
+            <!-- Step Indicator -->
+            <div class="step-indicator">
+                <div class="step-progress" style="width: 25%;"></div>
+                <div class="step active">
+                    <div class="step-number">1</div>
+                    <div class="step-label">URL du site</div>
+                </div>
+                <div class="step">
+                    <div class="step-number">2</div>
+                    <div class="step-label">Analyse auto</div>
+                </div>
+                <div class="step">
+                    <div class="step-number">3</div>
+                    <div class="step-label">Sélection</div>
+                </div>
+                <div class="step">
+                    <div class="step-number">4</div>
+                    <div class="step-label">Configuration</div>
+                </div>
+            </div>
+            
+            <!-- Step 1: URL Input -->
+            <div class="card" id="step1">
+                <div class="card-header">
+                    <h2 class="card-title">
+                        <span>🌐</span>
+                        Quel site souhaitez-vous scraper ?
+                    </h2>
+                    <p class="card-description">
+                        Entrez simplement l'URL du site web que vous voulez analyser. Notre système va automatiquement détecter les informations disponibles.
+                    </p>
+                </div>
+                
+                <div class="url-input-section">
+                    <label class="input-label">URL du site web</label>
+                    <div class="url-input-wrapper">
+                        <span class="url-icon">🔗</span>
+                        <input 
+                            type="text" 
+                            class="url-input" 
+                            id="urlInput"
+                            placeholder="https://example.com"
+                        >
+                    </div>
+                    
+                    <div class="example-urls">
+                        <span style="color: var(--text-muted); font-size: 0.85rem; margin-right: 0.5rem;">Exemples :</span>
+                        <span class="example-chip" data-url="https://shop.example.com">🛍️ E-commerce</span>
+                        <span class="example-chip" data-url="https://blog.example.com">📰 Blog</span>
+                        <span class="example-chip" data-url="https://jobs.example.com">💼 Offres d'emploi</span>
+                        <span class="example-chip" data-url="https://realestate.example.com">🏠 Immobilier</span>
+                    </div>
+                    
+                    <!-- Subdomain Option -->
+                    <div class="subdomain-option">
+                        <div class="option-info">
+                            <div class="option-title">Inclure les sous-domaines</div>
+                            <div class="option-description">
+                                Scraper également les sous-domaines du site principal (ex: admin.bni.ci, api.bni.ci, etc.)
+                            </div>
+                            <div class="option-example">
+                                Exemple : Si vous entrez "bni.ci", nous analyserons aussi "admin.bni.ci", "www.bni.ci", etc.
+                            </div>
+                        </div>
+                        <input type="checkbox" id="includeSubdomains">
+                        <label for="includeSubdomains" class="toggle-switch"></label>
+                    </div>
+                    
+                    <button class="btn-analyze" id="analyzeBtn">
+                        <span>🚀</span>
+                        Analyser le site
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Step 2 & 3: Analysis Results (Hidden by default) -->
+            <div class="analysis-results" id="analysisResults">
+                <div class="card">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            <span>✨</span>
+                            Analyse terminée !
+                        </h2>
+                        <p class="card-description">
+                            Voici ce que nous avons trouvé sur ce site. Cochez les éléments que vous souhaitez extraire.
+                        </p>
+                    </div>
+                    
+                    <!-- Site Info -->
+                    <div class="site-info-card">
+                        <div class="site-info-grid">
+                            <div class="info-item">
+                                <span class="info-label">Domaine</span>
+                                <span class="info-value" id="siteDomain">example.com</span>
+                            </div>
+                            <div class="info-item">
+                                <span class="info-label">Pages détectées</span>
+                                <span class="info-value" style="color: var(--accent);" id="pageCount">347</span>
+                            </div>
+                            <div class="info-item">
+                                <span class="info-label">Types de contenu</span>
+                                <span class="info-value" style="color: var(--success);" id="contentTypes">6</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Detected Content Types -->
+                    <div class="content-types-section">
+                        <h3 class="section-title">
+                            <span>📦</span>
+                            Types de contenu détectés
+                        </h3>
+                        
+                        <div class="content-grid">
+                            <div class="content-type-card" data-type="products">
+                                <div class="checkbox-indicator"></div>
+                                <div class="content-icon">🛍️</div>
+                                <div class="content-title">Produits E-commerce</div>
+                                <div class="content-description">
+                                    Noms, prix, descriptions, images, disponibilité
+                                </div>
+                                <div class="content-count">~1,245 produits trouvés</div>
+                            </div>
+                            
+                            <div class="content-type-card" data-type="articles">
+                                <div class="checkbox-indicator"></div>
+                                <div class="content-icon">📰</div>
+                                <div class="content-title">Articles de blog</div>
+                                <div class="content-description">
+                                    Titres, auteurs, dates, contenu, catégories
+                                </div>
+                                <div class="content-count">~87 articles trouvés</div>
+                            </div>
+                            
+                            <div class="content-type-card" data-type="comments">
+                                <div class="checkbox-indicator"></div>
+                                <div class="content-icon">💬</div>
+                                <div class="content-title">Commentaires</div>
+                                <div class="content-description">
+                                    Auteurs, dates, contenu, notes
+                                </div>
+                                <div class="content-count">~523 commentaires trouvés</div>
+                            </div>
+                            
+                            <div class="content-type-card" data-type="images">
+                                <div class="checkbox-indicator"></div>
+                                <div class="content-icon">🖼️</div>
+                                <div class="content-title">Images & Médias</div>
+                                <div class="content-description">
+                                    Photos, vidéos, galeries
+                                </div>
+                                <div class="content-count">~2,341 médias trouvés</div>
+                            </div>
+                            
+                            <div class="content-type-card" data-type="contacts">
+                                <div class="checkbox-indicator"></div>
+                                <div class="content-icon">📞</div>
+                                <div class="content-title">Informations de contact</div>
+                                <div class="content-description">
+                                    Emails, téléphones, adresses
+                                </div>
+                                <div class="content-count">~45 contacts trouvés</div>
+                            </div>
+                            
+                            <div class="content-type-card" data-type="tables">
+                                <div class="checkbox-indicator"></div>
+                                <div class="content-icon">📊</div>
+                                <div class="content-title">Tableaux de données</div>
+                                <div class="content-description">
+                                    Données structurées en tableaux
+                                </div>
+                                <div class="content-count">~12 tableaux trouvés</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Advanced Options -->
+                    <div class="advanced-section">
+                        <button class="advanced-toggle-btn" id="advancedToggle">
+                            <span>⚙️ Options avancées (pour utilisateurs expérimentés)</span>
+                            <span class="toggle-icon">▼</span>
+                        </button>
+                        
+                        <div class="advanced-content" id="advancedContent">
+                            <div class="advanced-options-grid">
+                                <div class="option-group">
+                                    <label class="option-label">Profondeur de navigation</label>
+                                    <select class="option-select">
+                                        <option>1 niveau (page actuelle)</option>
+                                        <option selected>2 niveaux (pages liées)</option>
+                                        <option>3 niveaux (navigation profonde)</option>
+                                        <option>Illimité</option>
+                                    </select>
+                                </div>
+                                
+                                <div class="option-group">
+                                    <label class="option-label">Délai entre requêtes (ms)</label>
+                                    <input type="number" class="option-input" value="500" placeholder="500">
+                                </div>
+                                
+                                <div class="option-group">
+                                    <label class="option-label">User Agent</label>
+                                    <select class="option-select">
+                                        <option>Chrome (Desktop)</option>
+                                        <option>Firefox (Desktop)</option>
+                                        <option>Safari (Desktop)</option>
+                                        <option>Mobile (iOS)</option>
+                                        <option>Mobile (Android)</option>
+                                    </select>
+                                </div>
+                                
+                                <div class="option-group">
+                                    <label class="option-label">Timeout (secondes)</label>
+                                    <input type="number" class="option-input" value="30" placeholder="30">
+                                </div>
+                            </div>
+                            
+                            <!-- Custom Selector Input -->
+                            <div class="selector-input-section">
+                                <div class="selector-title">🎯 Sélecteurs CSS personnalisés (optionnel)</div>
+                                <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
+                                    Pour les utilisateurs avancés : spécifiez vos propres sélecteurs CSS pour extraire des données précises.
+                                </p>
+                                
+                                <div class="selector-fields" id="selectorFields">
+                                    <div class="selector-field">
+                                        <input type="text" class="field-input" placeholder="Nom du champ" value="Titre produit">
+                                        <input type="text" class="field-input" placeholder="Sélecteur CSS" value="h2.product-title">
+                                        <button class="btn-remove">✕</button>
+                                    </div>
+                                    <div class="selector-field">
+                                        <input type="text" class="field-input" placeholder="Nom du champ" value="Prix">
+                                        <input type="text" class="field-input" placeholder="Sélecteur CSS" value="span.price">
+                                        <button class="btn-remove">✕</button>
+                                    </div>
+                                </div>
+                                
+                                <button class="btn-add-field" id="addFieldBtn">➕ Ajouter un champ personnalisé</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Storage Format Selection -->
+                    <div class="storage-section">
+                        <h3 class="section-title">
+                            <span>💾</span>
+                            Format de stockage
+                        </h3>
+                        <p class="card-description" style="margin-bottom: 1.5rem;">
+                            Choisissez le format dans lequel vous souhaitez recevoir vos données extraites.
+                        </p>
+                        
+                        <div class="format-grid">
+                            <div class="format-card selected" data-format="json">
+                                <div class="format-icon">🔧</div>
+                                <div class="format-name">JSON</div>
+                            </div>
+                            
+                            <div class="format-card" data-format="csv">
+                                <div class="format-icon">📄</div>
+                                <div class="format-name">CSV</div>
+                            </div>
+                            
+                            <div class="format-card" data-format="excel">
+                                <div class="format-icon">📊</div>
+                                <div class="format-name">Excel</div>
+                            </div>
+                            
+                            <div class="format-card" data-format="xml">
+                                <div class="format-icon">📋</div>
+                                <div class="format-name">XML</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Action Buttons -->
+                    <div class="action-buttons">
+                        <button class="btn-secondary">
+                            ← Retour
+                        </button>
+                        <button class="btn-primary" id="startScrapingBtn">
+                            <span>🚀</span>
+                            Lancer le scraping
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+    
+    <script>
+        // Example URLs
+        document.querySelectorAll('.example-chip').forEach(chip => {
+            chip.addEventListener('click', function() {
+                document.getElementById('urlInput').value = this.dataset.url;
+            });
+        });
+        
+        // Analyze button
+        document.getElementById('analyzeBtn').addEventListener('click', function() {
+            const url = document.getElementById('urlInput').value;
+            if (!url) {
+                alert('Veuillez entrer une URL');
+                return;
+            }
+            
+            // Simulate analysis
+            this.innerHTML = '<span>⏳</span> Analyse en cours...';
+            this.disabled = true;
+            
+            setTimeout(() => {
+                // Hide step 1
+                document.getElementById('step1').style.display = 'none';
+                
+                // Show results
+                document.getElementById('analysisResults').classList.add('visible');
+                
+                // Update site info
+                const domain = new URL(url).hostname;
+                document.getElementById('siteDomain').textContent = domain;
+                
+                // Update step indicator
+                document.querySelectorAll('.step')[0].classList.remove('active');
+                document.querySelectorAll('.step')[0].classList.add('completed');
+                document.querySelectorAll('.step')[1].classList.add('completed');
+                document.querySelectorAll('.step')[2].classList.add('active');
+                document.querySelector('.step-progress').style.width = '75%';
+                
+                this.disabled = false;
+                this.innerHTML = '<span>🚀</span> Analyser le site';
+            }, 2000);
+        });
+        
+        // Content type selection
+        document.querySelectorAll('.content-type-card').forEach(card => {
+            card.addEventListener('click', function() {
+                this.classList.toggle('selected');
+            });
+        });
+        
+        // Advanced options toggle
+        document.getElementById('advancedToggle').addEventListener('click', function() {
+            this.classList.toggle('active');
+            document.getElementById('advancedContent').classList.toggle('expanded');
+        });
+        
+        // Add custom field
+        document.getElementById('addFieldBtn').addEventListener('click', function() {
+            const fieldHTML = `
+                <div class="selector-field">
+                    <input type="text" class="field-input" placeholder="Nom du champ">
+                    <input type="text" class="field-input" placeholder="Sélecteur CSS">
+                    <button class="btn-remove">✕</button>
+                </div>
+            `;
+            document.getElementById('selectorFields').insertAdjacentHTML('beforeend', fieldHTML);
+            
+            // Add remove functionality
+            document.querySelectorAll('.btn-remove').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    this.closest('.selector-field').remove();
+                });
+            });
+        });
+        
+        // Remove field buttons
+        document.querySelectorAll('.btn-remove').forEach(btn => {
+            btn.addEventListener('click', function() {
+                this.closest('.selector-field').remove();
+            });
+        });
+        
+        // Storage format selection
+        document.querySelectorAll('.format-card').forEach(card => {
+            card.addEventListener('click', function() {
+                document.querySelectorAll('.format-card').forEach(c => c.classList.remove('selected'));
+                this.classList.add('selected');
+            });
+        });
+        
+        // Start scraping
+        document.getElementById('startScrapingBtn').addEventListener('click', function() {
+            const selectedTypes = Array.from(document.querySelectorAll('.content-type-card.selected'))
+                .map(card => card.dataset.type);
+            
+            const selectedFormat = document.querySelector('.format-card.selected').dataset.format;
+            
+            if (selectedTypes.length === 0) {
+                alert('Veuillez sélectionner au moins un type de contenu à extraire');
+                return;
+            }
+            
+            alert(`Scraping lancé !\n\nTypes: ${selectedTypes.join(', ')}\nFormat: ${selectedFormat.toUpperCase()}\n\nVous serez notifié une fois l'extraction terminée.`);
+        });
+    </script>
+</body>
+</html>

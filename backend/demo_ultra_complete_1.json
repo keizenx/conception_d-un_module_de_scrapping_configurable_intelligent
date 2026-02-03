@@ -1,0 +1,125 @@
+{
+  "metadata": {
+    "title": "Quotes to Scrape",
+    "url": "https://quotes.toscrape.com/js/",
+    "description": "",
+    "keywords": "",
+    "author": "",
+    "ogTitle": "",
+    "ogDescription": "",
+    "ogImage": "",
+    "canonical": "",
+    "language": "en",
+    "favicon": "",
+    "charset": "UTF-8",
+    "viewport": ""
+  },
+  "text": {
+    "fullText": "Quotes to Scrape\n\nLogin\n\n“The world as we have created it is a process of our thinking. It cannot be changed without changing our thinking.”\nby Albert Einstein\nTags: change deep-thoughts thinking world\n“It is our choices, Harry, that show what we truly are, far more than our abilities.”\nby J.K. Rowling\nTags: abilities choices\n“There are only two ways to live your life. One is as though nothing is a miracle. The other is as though everything is a miracle.”\nby Albert Einstein\nTags: inspirational life live miracle miracles\n“The person, be it gentleman or lady, who has not pleasure in a good novel, must be intolerably stupid.”\nby Jane Austen\nTags: aliteracy books classic humor\n“Imperfection is beauty, madness is genius and it's better to be absolutely ridiculous than absolutely boring.”\nby Marilyn Monroe\nTags: be-yourself inspirational\n“Try not to become a man of success. Rather become a man of value.”\nby Albert Einstein\nTags: adulthood success value\n“It is better to be hated for what you are than to be loved for what you are not.”\nby André Gide\nTags: life love\n“I have not failed. I've just found 10,000 ways that won't work.”\nby Thomas A. Edison\nTags: edison failure inspirational paraphrased\n“A woman is like a tea bag; you never know how strong it is until it's in hot water.”\nby Eleanor Roosevelt\nTags: misattributed-eleanor-roosevelt\n“A day without sunshine is like, you know, night.”\nby Steve Martin\nTags: humor obvious simile\nNext →\n\nQuotes by: GoodReads.com\n\nMade with ❤ by Zyte",
+    "title": "Quotes to Scrape",
+    "headings": {
+      "h1": [
+        "Quotes to Scrape"
+      ],
+      "h2": [],
+      "h3": [],
+      "h4": [],
+      "h5": [],
+      "h6": []
+    },
+    "paragraphs": [
+      "Login",
+      "Quotes by: GoodReads.com",
+      "Made with ❤ by Zyte"
+    ],
+    "lists": [
+      {
+        "type": "ul",
+        "items": [
+          "Next →"
+        ]
+      }
+    ],
+    "quotes": []
+  },
+  "media": {
+    "images": [],
+    "backgroundImages": [],
+    "videos": [],
+    "audios": [],
+    "iframes": []
+  },
+  "links": [
+    {
+      "href": "https://quotes.toscrape.com/",
+      "text": "Quotes to Scrape",
+      "title": "",
+      "target": "",
+      "rel": "",
+      "internal": true,
+      "index": 0
+    },
+    {
+      "href": "https://quotes.toscrape.com/login",
+      "text": "Login",
+      "title": "",
+      "target": "",
+      "rel": "",
+      "internal": true,
+      "index": 1
+    },
+    {
+      "href": "https://quotes.toscrape.com/js/page/2/",
+      "text": "Next →",
+      "title": "",
+      "target": "",
+      "rel": "",
+      "internal": true,
+      "index": 2
+    },
+    {
+      "href": "https://www.goodreads.com/quotes",
+      "text": "GoodReads.com",
+      "title": "",
+      "target": "",
+      "rel": "",
+      "internal": false,
+      "index": 3
+    },
+    {
+      "href": "https://www.zyte.com/",
+      "text": "Zyte",
+      "title": "",
+      "target": "",
+      "rel": "",
+      "internal": false,
+      "index": 4
+    }
+  ],
+  "files": [],
+  "forms": [],
+  "tables": [],
+  "structuredData": [],
+  "scripts": [
+    "https://quotes.toscrape.com/static/jquery.js"
+  ],
+  "styles": [
+    "https://quotes.toscrape.com/static/bootstrap.min.css",
+    "https://quotes.toscrape.com/static/main.css"
+  ],
+  "extraction_stats": {
+    "text_length": 1499,
+    "images": 0,
+    "background_images": 0,
+    "videos": 0,
+    "audios": 0,
+    "iframes": 0,
+    "links": 5,
+    "files": 0,
+    "forms": 0,
+    "tables": 0,
+    "structured_data": 0
+  },
+  "extraction_timestamp": 1770017982,
+  "extraction_url": "https://quotes.toscrape.com/js/"
+}

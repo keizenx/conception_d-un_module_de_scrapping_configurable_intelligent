@@ -7,6 +7,13 @@ build/
 .idea/
 *.log
 
+# Fichiers de test à exclure
+test_fonctionnel_complet.py
+test_simple_advanced.py
+test_ultra_complet.py
+mixkit-bell-notification-933.wav
+subfinder/
+
 # Python
 __pycache__/
 *.pyc

@@ -1,431 +1,369 @@
-// src/pages/Dashboard/Dashboard.jsx
-import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import Sidebar from '../../components/Sidebar';
-import SmartInputBar from '../../components/SmartInputBar/SmartInputBar';
+// Location: frontend/src/pages/Dashboard/Dashboard.jsx
+// Dashboard principal avec stats, graphiques et sessions récentes
+// Page principale de l'application après connexion
+// RELEVANT FILES: App.jsx, dashboard.css, AuthContext.jsx
+
+import React, { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import Chart from 'chart.js/auto';
+import api from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
 import '../../assets/css/dashboard.css';
 
 const Dashboard = () => {
-  const navigate = useNavigate();
-  const [analyticsData, setAnalyticsData] = useState({
-    successfulAnalyses: 245,
-    elementsDetected: 14800,
-    categoriesIdentified: 8.2,
-    analysisTime: 2.3,
-    accuracy: 96
-  });
-
-  const [recentAnalyses, setRecentAnalyses] = useState([
-    {
-      id: 1,
-      name: 'Amazon Électronique',
-      url: 'amazon.com/electronics',
-      icon: 'fas fa-shopping-cart',
-      elements: 148,
-      detectedItems: ['Prix', 'Images', 'Descriptions', 'Avis'],
-      date: 'Il y a 2h',
-      status: 'success',
-      statusText: 'Terminée'
-    },
-    {
-      id: 2,
-      name: 'GitHub Trending',
-      url: 'github.com/trending',
-      icon: 'fas fa-code',
-      elements: 42,
-      detectedItems: ['Répositories', 'Stars', 'Forks', 'Langages'],
-      date: 'Il y a 5h',
-      status: 'success',
-      statusText: 'Terminée'
-    },
-    {
-      id: 3,
-      name: 'Blog Tech',
-      url: 'techblog.example.com',
-      icon: 'fas fa-newspaper',
-      elements: 23,
-      detectedItems: ['Articles', 'Dates', 'Auteurs', 'Catégories'],
-      date: 'Hier',
-      status: 'warning',
-      statusText: 'Partielle'
-    },
-    {
-      id: 4,
-      name: 'E-commerce Fashion',
-      url: 'fashionstore.com',
-      icon: 'fas fa-tshirt',
-      elements: 89,
-      detectedItems: ['Produits', 'Prix', 'Tailles', 'Couleurs'],
-      date: 'Il y a 2 jours',
-      status: 'success',
-      statusText: 'Terminée'
-    }
-  ]);
-
-  const [activities, setActivities] = useState([
-    {
-      id: 1,
-      type: 'success',
-      icon: 'fas fa-check',
-      title: 'Analyse Terminée',
-      description: '"Amazon Électronique" : 148 éléments détectés',
-      time: 'Il y a 2h',
-      actions: ['Voir', 'Exporter']
-    },
-    {
-      id: 2,
-      type: 'info',
-      icon: 'fas fa-lightbulb',
-      title: 'Nouvelle Recommandation',
-      description: 'Configurer la surveillance quotidienne des prix',
-      time: 'Il y a 4h',
-      actions: ['Configurer']
-    },
-    {
-      id: 3,
-      type: 'progress',
-      icon: 'fas fa-sync-alt fa-spin',
-      title: 'ANALYSE EN COURS',
-      description: 'news.ycombinator.com : 65% complété',
-      time: 'En ce moment',
-      progress: 65
-    },
-    {
-      id: 4,
-      type: 'warning',
-      icon: 'fas fa-exclamation-triangle',
-      title: 'Structure Modifiée',
-      description: 'github.com a mis à jour son design',
-      time: 'Il y a 1 jour',
-      actions: ['Re-analyser']
-    }
-  ]);
-
-  // Fonction pour gérer l'analyse
-  const handleAnalyze = (input, type) => {
-    console.log('Starting analysis:', { input, type });
+    const navigate = useNavigate();
+    const { user, logout } = useAuth();
+    const chartRef = useRef(null);
+    const chartInstance = useRef(null);
     
-    // Naviguer vers la page d'analyse avec les paramètres
-    navigate(`/analysis?input=${encodeURIComponent(input)}&type=${type}`);
-  };
+    // State management
+    const [stats, setStats] = useState({
+        totalSessions: 0,
+        extractedData: 0,
+        successRate: 0,
+        avgTime: '0s'
+    });
+    const [sessions, setSessions] = useState([]);
+    const [activityData, setActivityData] = useState({
+        labels: [],
+        data: []
+    });
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState(null);
+    
+    // Charger les statistiques du dashboard
+    useEffect(() => {
+        const loadDashboardData = async () => {
+            try {
+                setIsLoading(true);
+                setError(null);
+                
+                // Charger les stats (séparément pour éviter que tout échoue si une requête échoue)
+                try {
+                    const statsData = await api.getDashboardStats();
+                    setStats({
+                        totalSessions: statsData.total_sessions || 0,
+                        extractedData: statsData.extracted_data || 0,
+                        successRate: statsData.success_rate || 0,
+                        avgTime: statsData.avg_time || '0s'
+                    });
+                } catch (statsErr) {
+                    console.error('Erreur stats:', statsErr);
+                    // Si erreur 401, rediriger vers login
+                    if (statsErr.message.includes('401') || statsErr.message.includes('authentifi')) {
+                        await logout();
+                        navigate('/login');
+                        return;
+                    }
+                }
+                
+                // Charger les sessions récentes
+                try {
+                    const sessionsData = await api.getRecentSessions();
+                    setSessions(sessionsData || []);
+                } catch (sessionsErr) {
+                    console.error('Erreur sessions:', sessionsErr);
+                    setSessions([]);
+                }
+                
+                // Charger les données d'activité pour le graphique
+                try {
+                    const activity = await api.getActivityData();
+                    if (activity && activity.labels && activity.data) {
+                        setActivityData({
+                            labels: activity.labels,
+                            data: activity.data
+                        });
+                    }
+                } catch (activityErr) {
+                    console.error('Erreur activity:', activityErr);
+                }
+                
+            } catch (err) {
+                console.error('Erreur lors du chargement des données:', err);
+                setError(err.message || 'Erreur lors du chargement des données');
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        
+        loadDashboardData();
+    }, []);
 
-  // Fonction pour télécharger un rapport
-  const downloadReport = (analysisId) => {
-    console.log('Downloading report for analysis:', analysisId);
-    // Simulation de téléchargement
-    alert(`Téléchargement du rapport ${analysisId} démarré...`);
-  };
+    useEffect(() => {
+        if (chartRef.current && activityData.labels.length > 0) {
+            const ctx = chartRef.current.getContext('2d');
+            
+            // Gradient pour le fond du graphique
+            const gradient = ctx.createLinearGradient(0, 0, 0, 300);
+            gradient.addColorStop(0, 'rgba(255, 77, 0, 0.3)');
+            gradient.addColorStop(1, 'rgba(255, 77, 0, 0.0)');
 
-  // Fonction pour voir les détails d'une analyse
-  const viewAnalysisDetails = (analysisId) => {
-    console.log('Viewing analysis details:', analysisId);
-    navigate(`/results?analysis=${analysisId}`);
-  };
+            // Détruire l'ancien graphique si existant
+            if (chartInstance.current) {
+                chartInstance.current.destroy();
+            }
 
-  return (
-    <div className="dashboard-container">
-      <Sidebar />
-      
-      <main className="main-content">
-        {/* Top Bar */}
-        <header className="top-bar">
-          <h2>Tableau de Bord</h2>
-          <div className="top-bar-actions">
-            <button 
-              className="btn btn-primary" 
-              onClick={() => navigate('/analysis')}
-            >
-              <i className="fas fa-plus"></i>
-              Nouvelle Analyse
-            </button>
-            <button className="btn btn-secondary">
-              <i className="fas fa-bell"></i>
-              <span className="notification-count">3</span>
-            </button>
-          </div>
-        </header>
+            // Créer le nouveau graphique avec les données de l'API
+            chartInstance.current = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: activityData.labels,
+                    datasets: [{
+                        label: 'Sessions',
+                        data: activityData.data,
+                        borderColor: '#FF4D00',
+                        backgroundColor: gradient,
+                        borderWidth: 3,
+                        fill: true,
+                        tension: 0.4,
+                        pointBackgroundColor: '#FF4D00',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2,
+                        pointRadius: 5,
+                        pointHoverRadius: 7
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            backgroundColor: '#141419',
+                            borderColor: '#FF4D00',
+                            borderWidth: 1,
+                            titleColor: '#FFFFFF',
+                            bodyColor: '#A0A0B0',
+                            padding: 12,
+                            displayColors: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: {
+                                color: 'rgba(255, 77, 0, 0.1)',
+                                drawBorder: false
+                            },
+                            ticks: {
+                                color: '#606070'
+                            }
+                        },
+                        x: {
+                            grid: {
+                                display: false
+                            },
+                            ticks: {
+                                color: '#606070'
+                            }
+                        }
+                    }
+                }
+            });
+        }
 
-        {/* Smart Input Section */}
-        <section className="card highlight-card">
-          <div className="card-header">
-            <h3><i className="fas fa-search-plus"></i> Démarrer une nouvelle analyse</h3>
-            <span className="card-subtitle">
-              Notre scrapeur détectera automatiquement tous les éléments scrappables
-            </span>
-          </div>
-          
-          <SmartInputBar 
-            onAnalyze={handleAnalyze}
-            placeholder="Collez une URL, un sélecteur CSS ou du HTML brut..."
-          />
-          
-          {/* <div className="analysis-tips">
-            <div className="tip">
-              <i className="fas fa-link"></i>
-              <div>
-                <strong>Pour les débutants :</strong> Collez simplement l'URL du site
-              </div>
-            </div>
-            <div className="tip">
-              <i className="fas fa-bullseye"></i>
-              <div>
-                <strong>Pour les experts :</strong> Utilisez les sélecteurs CSS pour cibler précisément
-              </div>
-            </div>
-          </div> */}
-        </section>
+        // Cleanup
+        return () => {
+            if (chartInstance.current) {
+                chartInstance.current.destroy();
+            }
+        };
+    }, [activityData]);
 
-        {/* Analytics Summary */}
-        <section className="data-summary">
-          <div className="summary-card">
-            <div className="summary-icon" style={{backgroundColor: '#e3f2fd'}}>
-              <i className="fas fa-check-circle" style={{color: '#1976d2'}}></i>
-            </div>
-            <div className="summary-content">
-              <h4>Analyses Réussies</h4>
-              <p className="summary-number">
-                {analyticsData.successfulAnalyses.toLocaleString()}
-                <span className="summary-change positive">+32</span>
-              </p>
-              <p className="summary-label">Ce mois</p>
-            </div>
-          </div>
+    const handleNewScraping = () => {
+        navigate('/analysis');
+    };
 
-          <div className="summary-card">
-            <div className="summary-icon" style={{backgroundColor: '#f3e5f5'}}>
-              <i className="fas fa-bullseye" style={{color: '#7b1fa2'}}></i>
-            </div>
-            <div className="summary-content">
-              <h4>Éléments Détectés</h4>
-              <p className="summary-number">
-                {analyticsData.elementsDetected.toLocaleString()}
-              </p>
-              <p className="summary-label">En moyenne par analyse</p>
-            </div>
-          </div>
+    return (
+        <div className="app-container">
+            {/* Sidebar */}
+            <aside className="sidebar">
+                <div className="logo" onClick={() => navigate('/dashboard')} style={{ cursor: 'pointer' }}>
+                    <div className="logo-icon"><span className="material-icons">flash_on</span></div>
+                    SCRAPER PRO
+                </div>
+            </aside>
 
-          <div className="summary-card">
-            <div className="summary-icon" style={{backgroundColor: '#e8f5e9'}}>
-              <i className="fas fa-tags" style={{color: '#388e3c'}}></i>
-            </div>
-            <div className="summary-content">
-              <h4>Catégories Identifiées</h4>
-              <p className="summary-number">
-                {analyticsData.categoriesIdentified}
-              </p>
-              <p className="summary-label">Catégories moyennes par site</p>
-            </div>
-          </div>
-
-          <div className="summary-card">
-            <div className="summary-icon" style={{backgroundColor: '#fff3e0'}}>
-              <i className="fas fa-bolt" style={{color: '#f57c00'}}></i>
-            </div>
-            <div className="summary-content">
-              <h4>Temps d'Analyse</h4>
-              <p className="summary-number">
-                {analyticsData.analysisTime}s
-              </p>
-              <p className="summary-label">Moyenne par site</p>
-            </div>
-          </div>
-
-          <div className="summary-card">
-            <div className="summary-icon" style={{backgroundColor: '#ffebee'}}>
-              <i className="fas fa-crosshairs" style={{color: '#d32f2f'}}></i>
-            </div>
-            <div className="summary-content">
-              <h4>Précision</h4>
-              <p className="summary-number">
-                {analyticsData.accuracy}%
-              </p>
-              <p className="summary-label">Des suggestions sont pertinentes</p>
-            </div>
-          </div>
-        </section>
-
-        {/* Recent Analyses */}
-        <section className="card">
-          <div className="card-header">
-            <h3><i className="fas fa-history"></i> Analyses Récentes</h3>
-            <Link to="/results" className="btn btn-small">
-              <i className="fas fa-list"></i>
-              Voir toutes
-            </Link>
-          </div>
-          
-          <table className="analyses-table">
-            <thead>
-              <tr>
-                <th>SITE ANALYSÉ</th>
-                <th>ÉLÉMENTS DÉTECTÉS</th>
-                <th>DATE</th>
-                <th>STATUT</th>
-                <th>ACTIONS</th>
-              </tr>
-            </thead>
-            <tbody>
-              {recentAnalyses.map((analysis) => (
-                <tr key={analysis.id}>
-                  <td>
-                    <div className="site-info">
-                      <i className={analysis.icon}></i>
-                      <div>
-                        <strong>{analysis.name}</strong>
-                        <small>{analysis.url}</small>
-                      </div>
-                    </div>
-                  </td>
-                  <td>
-                    <div className="detected-elements">
-                      <span className="element-count">{analysis.elements} éléments</span>
-                      <div className="element-tags">
-                        {analysis.detectedItems.slice(0, 3).map((item, index) => (
-                          <span key={index} className="element-tag">{item}</span>
-                        ))}
-                        {analysis.detectedItems.length > 3 && (
-                          <span className="element-tag more">+{analysis.detectedItems.length - 3}</span>
-                        )}
-                      </div>
-                    </div>
-                  </td>
-                  <td>{analysis.date}</td>
-                  <td>
-                    <span className={`status-badge ${analysis.status}`}>
-                      {analysis.statusText}
-                    </span>
-                  </td>
-                  <td>
-                    <div className="action-buttons">
-                      <button 
-                        className="btn-icon" 
-                        title="Voir l'analyse"
-                        onClick={() => viewAnalysisDetails(analysis.id)}
-                      >
-                        <i className="fas fa-eye"></i>
-                      </button>
-                      <button 
-                        className="btn-icon" 
-                        title="Configurer le scraping"
-                        onClick={() => navigate(`/analysis?from=${analysis.id}`)}
-                      >
-                        <i className="fas fa-cog"></i>
-                      </button>
-                      <button 
-                        className="btn-icon" 
-                        title="Exporter"
-                        onClick={() => downloadReport(analysis.id)}
-                      >
-                        <i className="fas fa-download"></i>
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
-
-        {/* Activity Feed & Recommendations */}
-        <div className="two-column-layout">
-          {/* Activity Feed */}
-          <section className="card">
-            <div className="card-header">
-              <h3><i className="fas fa-rss"></i> Activité Récente</h3>
-            </div>
-            <div className="activity-list">
-              {activities.map((activity) => (
-                <div className="activity-item" key={activity.id}>
-                  <div className={`activity-icon ${activity.type}`}>
-                    <i className={activity.icon}></i>
-                  </div>
-                  <div className="activity-content">
-                    <h4>{activity.title}</h4>
-                    <p className="activity-time">{activity.time}</p>
-                    <p className="activity-description">{activity.description}</p>
-                    
-                    {activity.progress && (
-                      <div className="progress-container">
-                        <div className="progress-bar">
-                          <div 
-                            className="progress-fill" 
-                            style={{width: `${activity.progress}%`}}
-                          ></div>
+            {/* Main Content */}
+            <main className="main-content">
+                {/* Header */}
+                <header className="page-header">
+                    <h1 className="page-title">Dashboard</h1>
+                    <div className="header-actions">
+                        <button className="btn-primary" onClick={handleNewScraping}>
+                            <span className="material-icons">add</span>
+                            Nouveau scraping
+                        </button>
+                        <div className="user-profile">
+                            <div className="avatar">{user?.name?.substring(0, 2).toUpperCase() || 'U'}</div>
+                            <span>{user?.name || 'Utilisateur'}</span>
                         </div>
-                        <span className="progress-text">{activity.progress}% complété</span>
-                      </div>
-                    )}
-                    
-                    {activity.actions && activity.actions.length > 0 && (
-                      <div className="activity-actions">
-                        {activity.actions.map((action, index) => (
-                          <button key={index} className="btn-link">
-                            {action}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
+                        <button className="btn-logout" onClick={async () => { await logout(); navigate('/login'); }}>
+                            <span className="material-icons">logout</span>
+                            Déconnexion
+                        </button>
+                    </div>
+                </header>
 
-          {/* Recommendations */}
-          <section className="card">
-            <div className="card-header">
-              <h3><i className="fas fa-lightbulb"></i> Recommandations</h3>
-            </div>
-            <div className="recommendations">
-              <div className="recommendation">
-                <div className="rec-icon success">
-                  <i className="fas fa-chart-line"></i>
+                {/* Stats Grid */}
+                {isLoading ? (
+                    <div className="stats-grid">
+                        <div className="stat-card"><div className="stat-value">Chargement...</div></div>
+                        <div className="stat-card"><div className="stat-value">Chargement...</div></div>
+                        <div className="stat-card"><div className="stat-value">Chargement...</div></div>
+                        <div className="stat-card"><div className="stat-value">Chargement...</div></div>
+                    </div>
+                ) : (
+                    <div className="stats-grid">
+                        <div className="stat-card">
+                            <div className="stat-header">
+                                <div>
+                                    <div className="stat-label">Sessions totales</div>
+                                </div>
+                                <div className="stat-icon"><span className="material-icons">rocket_launch</span></div>
+                            </div>
+                            <div className="stat-value">{stats.totalSessions.toLocaleString()}</div>
+                        </div>
+
+                        <div className="stat-card">
+                            <div className="stat-header">
+                                <div>
+                                    <div className="stat-label">Données extraites</div>
+                                </div>
+                                <div className="stat-icon"><span className="material-icons">inventory_2</span></div>
+                            </div>
+                            <div className="stat-value">{stats.extractedData > 1000 ? `${(stats.extractedData / 1000).toFixed(1)}K` : stats.extractedData}</div>
+                        </div>
+
+                        <div className="stat-card">
+                            <div className="stat-header">
+                                <div>
+                                    <div className="stat-label">Taux de succès</div>
+                                </div>
+                                <div className="stat-icon"><span className="material-icons">check_circle</span></div>
+                            </div>
+                            <div className="stat-value">{stats.successRate}%</div>
+                        </div>
+
+                        <div className="stat-card">
+                            <div className="stat-header">
+                                <div>
+                                    <div className="stat-label">Temps moyen</div>
+                                </div>
+                                <div className="stat-icon"><span className="material-icons">flash_on</span></div>
+                            </div>
+                            <div className="stat-value">{stats.avgTime}</div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Content Grid */}
+                <div className="content-grid">
+                    {/* Activity Chart */}
+                    <div className="card">
+                        <div className="card-header">
+                            <h3 className="card-title">Activité (7 derniers jours)</h3>
+                            <span className="card-action">Voir tout →</span>
+                        </div>
+                        <div className="chart-container">
+                            <canvas ref={chartRef} id="activityChart"></canvas>
+                        </div>
+                    </div>
+
+                    {/* Quick Actions */}
+                    <div className="card">
+                        <div className="card-header">
+                            <h3 className="card-title">Actions rapides</h3>
+                        </div>
+                        <div className="quick-actions">
+                            <div className="quick-action-btn" onClick={() => navigate('/analysis')}>
+                                <div className="action-icon"><span className="material-icons">search</span></div>
+                                <div className="action-text">
+                                    <h4>Analyser une URL</h4>
+                                    <p>Configuration rapide</p>
+                                </div>
+                            </div>
+                            <div className="quick-action-btn" onClick={() => navigate('/results')}>
+                                <div className="action-icon results-icon"><span className="material-icons">visibility</span></div>
+                                <div className="action-text">
+                                    <h4>Voir les résultats</h4>
+                                    <p>Dernière session</p>
+                                </div>
+                            </div>
+                            <div className="quick-action-btn" onClick={() => navigate('/reports')}>
+                                <div className="action-icon"><span className="material-icons">bar_chart</span></div>
+                                <div className="action-text">
+                                    <h4>Voir rapports</h4>
+                                    <p>Historique complet</p>
+                                </div>
+                            </div>
+                            <div className="quick-action-btn" onClick={() => navigate('/settings')}>
+                                <div className="action-icon"><span className="material-icons">settings</span></div>
+                                <div className="action-text">
+                                    <h4>API Manager</h4>
+                                    <p>Clés et webhooks</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <div className="rec-content">
-                  <h4>Surveillance des prix</h4>
-                  <p>Configurez une surveillance quotidienne des prix sur Amazon</p>
-                  <button className="btn-link">Configurer</button>
+
+                {/* Recent Sessions */}
+                <div className="card">
+                    <div className="card-header">
+                        <h3 className="card-title">Sessions récentes</h3>
+                        <span className="card-action" onClick={() => navigate('/reports')} style={{cursor: 'pointer'}}>Historique complet →</span>
+                    </div>
+                    <div className="session-list">
+                        {isLoading ? (
+                            <div style={{padding: '2rem', textAlign: 'center', color: 'var(--text-muted)'}}>Chargement des sessions...</div>
+                        ) : error ? (
+                            <div style={{padding: '2rem', textAlign: 'center', color: 'var(--error)'}}>Erreur: {error}</div>
+                        ) : sessions.length === 0 ? (
+                            <div style={{padding: '2rem', textAlign: 'center', color: 'var(--text-muted)'}}>
+                                <p>Aucune session récente</p>
+                                <button className="btn-primary" onClick={() => navigate('/analysis')} style={{marginTop: '1rem'}}>
+                                    <span className="material-icons">add</span>
+                                    Lancer un scraping
+                                </button>
+                            </div>
+                        ) : (
+                            sessions.map((session) => (
+                                <div key={session.id} className="session-item">
+                                    <div className="session-info">
+                                        <div className={`session-status status-${session.status}`}></div>
+                                        <div className="session-details">
+                                            <h4>{session.url || 'Session'}</h4>
+                                            <p>{new Date(session.started_at).toLocaleString('fr-FR')}</p>
+                                        </div>
+                                    </div>
+                                    <div className="session-meta">
+                                        <div className="session-count">{session.total_items || 0} éléments</div>
+                                        <span className={`status-badge ${session.status === 'completed' ? 'success' : session.status === 'failed' ? 'error' : 'pending'}`}>
+                                            {session.status === 'completed' ? 'Terminé' : session.status === 'failed' ? 'Échoué' : session.status === 'in_progress' ? 'En cours' : 'En attente'}
+                                        </span>
+                                        {session.status === 'completed' && (
+                                            <button 
+                                                className="btn-results"
+                                                onClick={() => navigate(`/results?session=${session.id}`)}
+                                                title="Voir les résultats"
+                                            >
+                                                <span className="material-icons">visibility</span>
+                                                Résultats
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                    </div>
                 </div>
-              </div>
-              
-              <div className="recommendation">
-                <div className="rec-icon info">
-                  <i className="fas fa-newspaper"></i>
-                </div>
-                <div className="rec-content">
-                  <h4>Extraction d'articles</h4>
-                  <p>Automatisez l'extraction des derniers articles tech</p>
-                  <button className="btn-link">Automatiser</button>
-                </div>
-              </div>
-              
-              <div className="recommendation">
-                <div className="rec-icon warning">
-                  <i className="fas fa-sync-alt"></i>
-                </div>
-                <div className="rec-content">
-                  <h4>Mise à jour nécessaire</h4>
-                  <p>Re-analysez GitHub Trending pour nouvelles données</p>
-                  <button className="btn-link">Re-analyser</button>
-                </div>
-              </div>
-              
-              <div className="recommendation">
-                <div className="rec-icon primary">
-                  <i className="fas fa-graduation-cap"></i>
-                </div>
-                <div className="rec-content">
-                  <h4>Apprenez à scraper</h4>
-                  <p>Suivez notre guide pour maîtriser les sélecteurs CSS</p>
-                  <button className="btn-link">Voir le guide</button>
-                </div>
-              </div>
-            </div>
-          </section>
+            </main>
         </div>
-      </main>
-    </div>
-  );
+    );
 };
 
 export default Dashboard;

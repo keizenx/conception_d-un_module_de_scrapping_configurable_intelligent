@@ -1,0 +1,861 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Résultats - SCRAPER PRO</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #FF4D00;
+            --primary-dark: #CC3D00;
+            --accent: #00E5FF;
+            --success: #00FF88;
+            --warning: #FFB800;
+            --error: #FF3B3B;
+            --bg-dark: #0A0A0F;
+            --bg-darker: #050508;
+            --bg-card: #141419;
+            --bg-hover: #1A1A20;
+            --text-primary: #FFFFFF;
+            --text-secondary: #A0A0B0;
+            --text-muted: #606070;
+            --border: rgba(255, 77, 0, 0.1);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            overflow-x: hidden;
+        }
+        
+        .app-container {
+            display: flex;
+            min-height: 100vh;
+        }
+        
+        /* Sidebar */
+        .sidebar {
+            width: 280px;
+            background: var(--bg-darker);
+            border-right: 1px solid var(--border);
+            padding: 2rem 0;
+            position: fixed;
+            height: 100vh;
+            overflow-y: auto;
+        }
+        
+        .logo {
+            padding: 0 2rem;
+            margin-bottom: 3rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 1.8rem;
+            letter-spacing: 2px;
+            color: var(--primary);
+        }
+        
+        .logo-icon {
+            width: 36px;
+            height: 36px;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+        }
+        
+        .nav-section {
+            margin-bottom: 2rem;
+        }
+        
+        .nav-title {
+            padding: 0 2rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 0.5rem;
+        }
+        
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 0.875rem 2rem;
+            color: var(--text-secondary);
+            text-decoration: none;
+            transition: all 0.3s ease;
+            border-left: 3px solid transparent;
+            font-weight: 500;
+        }
+        
+        .nav-item:hover {
+            background: rgba(255, 77, 0, 0.05);
+            color: var(--text-primary);
+            border-left-color: var(--primary);
+        }
+        
+        .nav-item.active {
+            background: rgba(255, 77, 0, 0.1);
+            color: var(--primary);
+            border-left-color: var(--primary);
+        }
+        
+        .nav-icon {
+            font-size: 1.25rem;
+            width: 24px;
+            text-align: center;
+        }
+        
+        /* Main Content */
+        .main-content {
+            margin-left: 280px;
+            flex: 1;
+            padding: 2rem 3rem;
+        }
+        
+        /* Header */
+        .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 2rem;
+        }
+        
+        .page-title {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 2.5rem;
+            letter-spacing: 2px;
+        }
+        
+        .session-info {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1rem 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 2rem;
+        }
+        
+        .info-item {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+        
+        .info-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .info-value {
+            font-size: 1.1rem;
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+        }
+        
+        .status-badge {
+            padding: 0.4rem 1rem;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+        
+        .status-success {
+            background: rgba(0, 255, 136, 0.1);
+            color: var(--success);
+            border: 1px solid var(--success);
+        }
+        
+        /* Controls Bar */
+        .controls-bar {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 1.5rem;
+        }
+        
+        .search-box {
+            flex: 1;
+            max-width: 400px;
+            position: relative;
+        }
+        
+        .search-icon {
+            position: absolute;
+            left: 1rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-muted);
+            font-size: 1.1rem;
+        }
+        
+        .search-input {
+            width: 100%;
+            padding: 0.875rem 1rem 0.875rem 3rem;
+            background: var(--bg-darker);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            color: var(--text-primary);
+            font-size: 0.95rem;
+            transition: all 0.3s ease;
+        }
+        
+        .search-input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(255, 77, 0, 0.1);
+        }
+        
+        .filter-group {
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+        }
+        
+        .filter-btn {
+            padding: 0.75rem 1.25rem;
+            background: var(--bg-darker);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .filter-btn:hover {
+            background: var(--bg-hover);
+            border-color: rgba(255, 77, 0, 0.3);
+        }
+        
+        .filter-btn.active {
+            background: rgba(255, 77, 0, 0.1);
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+        
+        /* Export Buttons */
+        .export-group {
+            display: flex;
+            gap: 0.5rem;
+        }
+        
+        .export-btn {
+            padding: 0.75rem 1.25rem;
+            background: var(--bg-darker);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .export-btn:hover {
+            background: rgba(255, 77, 0, 0.1);
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+        
+        /* Data Table */
+        .table-container {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            overflow: hidden;
+            margin-bottom: 2rem;
+        }
+        
+        .table-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1.5rem;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        .table-title {
+            font-size: 1.25rem;
+            font-weight: 700;
+        }
+        
+        .table-count {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            font-family: 'JetBrains Mono', monospace;
+        }
+        
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .data-table thead {
+            background: var(--bg-darker);
+        }
+        
+        .data-table th {
+            padding: 1rem 1.5rem;
+            text-align: left;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        .data-table th:hover {
+            color: var(--primary);
+            cursor: pointer;
+        }
+        
+        .data-table tbody tr {
+            border-bottom: 1px solid var(--border);
+            transition: all 0.2s ease;
+        }
+        
+        .data-table tbody tr:hover {
+            background: var(--bg-hover);
+        }
+        
+        .data-table td {
+            padding: 1.25rem 1.5rem;
+            font-size: 0.9rem;
+        }
+        
+        .data-table td:first-child {
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--text-muted);
+        }
+        
+        .cell-title {
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 0.25rem;
+        }
+        
+        .cell-url {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            font-family: 'JetBrains Mono', monospace;
+        }
+        
+        .cell-truncate {
+            max-width: 300px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        .price-tag {
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 700;
+            color: var(--success);
+            font-size: 1.05rem;
+        }
+        
+        .action-menu {
+            display: flex;
+            gap: 0.5rem;
+        }
+        
+        .action-btn {
+            width: 32px;
+            height: 32px;
+            background: rgba(255, 77, 0, 0.1);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 0.9rem;
+        }
+        
+        .action-btn:hover {
+            background: rgba(255, 77, 0, 0.2);
+            border-color: var(--primary);
+        }
+        
+        /* Pagination */
+        .pagination {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1.5rem;
+            border-top: 1px solid var(--border);
+        }
+        
+        .pagination-info {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+        }
+        
+        .pagination-controls {
+            display: flex;
+            gap: 0.5rem;
+        }
+        
+        .page-btn {
+            width: 36px;
+            height: 36px;
+            background: var(--bg-darker);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+        }
+        
+        .page-btn:hover {
+            background: var(--bg-hover);
+            border-color: rgba(255, 77, 0, 0.3);
+        }
+        
+        .page-btn.active {
+            background: rgba(255, 77, 0, 0.1);
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+        
+        /* Error Alert */
+        .error-alert {
+            background: rgba(255, 59, 59, 0.1);
+            border: 1px solid var(--error);
+            border-radius: 12px;
+            padding: 1.25rem;
+            margin-bottom: 2rem;
+            display: flex;
+            align-items: flex-start;
+            gap: 1rem;
+        }
+        
+        .error-icon {
+            font-size: 1.5rem;
+            flex-shrink: 0;
+        }
+        
+        .error-content h4 {
+            color: var(--error);
+            font-size: 1rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+        
+        .error-content p {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            line-height: 1.6;
+        }
+        
+        .fallback-solution {
+            margin-top: 0.75rem;
+            padding: 0.75rem 1rem;
+            background: var(--bg-card);
+            border-radius: 8px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            color: var(--success);
+        }
+        
+        @media (max-width: 968px) {
+            .sidebar {
+                transform: translateX(-100%);
+            }
+            
+            .main-content {
+                margin-left: 0;
+            }
+            
+            .controls-bar {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .search-box {
+                max-width: 100%;
+            }
+            
+            .table-container {
+                overflow-x: auto;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo">
+                <div class="logo-icon">⚡</div>
+                SCRAPER PRO
+            </div>
+            
+            <nav>
+                <div class="nav-section">
+                    <div class="nav-title">Principal</div>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">📊</span>
+                        Dashboard
+                    </a>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">🔍</span>
+                        Analyse
+                    </a>
+                    <a href="#" class="nav-item active">
+                        <span class="nav-icon">📈</span>
+                        Résultats
+                    </a>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">📋</span>
+                        Rapports
+                    </a>
+                </div>
+                
+                <div class="nav-section">
+                    <div class="nav-title">Outils</div>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">⚙️</span>
+                        Paramètres
+                    </a>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">📚</span>
+                        Documentation
+                    </a>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">💬</span>
+                        Support
+                    </a>
+                </div>
+            </nav>
+        </aside>
+        
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Header -->
+            <header class="page-header">
+                <div>
+                    <h1 class="page-title">Résultats du scraping</h1>
+                    <p style="color: var(--text-muted); margin-top: 0.5rem;">Session #SCR-2026-001247</p>
+                </div>
+                <div class="session-info">
+                    <div class="info-item">
+                        <span class="info-label">Statut</span>
+                        <span class="status-badge status-success">✓ Terminé</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Éléments</span>
+                        <span class="info-value">1,245</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Durée</span>
+                        <span class="info-value">2m 34s</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Taux succès</span>
+                        <span class="info-value" style="color: var(--success);">98.5%</span>
+                    </div>
+                </div>
+            </header>
+            
+            <!-- Error Alert Example -->
+            <div class="error-alert">
+                <div class="error-icon">⚠️</div>
+                <div class="error-content">
+                    <h4>19 éléments n'ont pas pu être extraits</h4>
+                    <p>Certains produits utilisent un chargement dynamique qui a échoué. Le système a automatiquement appliqué une solution de secours.</p>
+                    <div class="fallback-solution">
+                        ✓ Fallback activé : Extraction via BeautifulSoup au lieu de Playwright
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Controls Bar -->
+            <div class="controls-bar">
+                <div class="search-box">
+                    <span class="search-icon">🔍</span>
+                    <input type="text" class="search-input" placeholder="Rechercher dans les résultats...">
+                </div>
+                
+                <div class="filter-group">
+                    <button class="filter-btn active">
+                        <span>📦</span>
+                        Tous
+                    </button>
+                    <button class="filter-btn">
+                        <span>⚡</span>
+                        Nouveaux
+                    </button>
+                    <button class="filter-btn">
+                        <span>⚠️</span>
+                        Erreurs
+                    </button>
+                </div>
+                
+                <div class="export-group">
+                    <button class="export-btn">
+                        <span>📄</span>
+                        CSV
+                    </button>
+                    <button class="export-btn">
+                        <span>📊</span>
+                        Excel
+                    </button>
+                    <button class="export-btn">
+                        <span>🔧</span>
+                        JSON
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Data Table -->
+            <div class="table-container">
+                <div class="table-header">
+                    <h3 class="table-title">Données extraites</h3>
+                    <span class="table-count">Affichage 1-20 sur 1,245 éléments</span>
+                </div>
+                
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 60px;">#</th>
+                            <th>Produit</th>
+                            <th>Prix</th>
+                            <th>Stock</th>
+                            <th>Catégorie</th>
+                            <th style="width: 120px;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>001</td>
+                            <td>
+                                <div class="cell-title">Laptop Dell XPS 15</div>
+                                <div class="cell-url cell-truncate">https://shop.example.com/products/laptop-dell-xps-15</div>
+                            </td>
+                            <td><span class="price-tag">$1,299.99</span></td>
+                            <td style="color: var(--success);">En stock (45)</td>
+                            <td>Ordinateurs</td>
+                            <td>
+                                <div class="action-menu">
+                                    <button class="action-btn" title="Voir">👁️</button>
+                                    <button class="action-btn" title="Modifier">✏️</button>
+                                    <button class="action-btn" title="Supprimer">🗑️</button>
+                                </div>
+                            </td>
+                        </tr>
+                        
+                        <tr>
+                            <td>002</td>
+                            <td>
+                                <div class="cell-title">iPhone 15 Pro Max</div>
+                                <div class="cell-url cell-truncate">https://shop.example.com/products/iphone-15-pro-max</div>
+                            </td>
+                            <td><span class="price-tag">$1,199.00</span></td>
+                            <td style="color: var(--success);">En stock (120)</td>
+                            <td>Smartphones</td>
+                            <td>
+                                <div class="action-menu">
+                                    <button class="action-btn">👁️</button>
+                                    <button class="action-btn">✏️</button>
+                                    <button class="action-btn">🗑️</button>
+                                </div>
+                            </td>
+                        </tr>
+                        
+                        <tr>
+                            <td>003</td>
+                            <td>
+                                <div class="cell-title">Sony WH-1000XM5 Headphones</div>
+                                <div class="cell-url cell-truncate">https://shop.example.com/products/sony-wh1000xm5</div>
+                            </td>
+                            <td><span class="price-tag">$399.99</span></td>
+                            <td style="color: var(--success);">En stock (87)</td>
+                            <td>Audio</td>
+                            <td>
+                                <div class="action-menu">
+                                    <button class="action-btn">👁️</button>
+                                    <button class="action-btn">✏️</button>
+                                    <button class="action-btn">🗑️</button>
+                                </div>
+                            </td>
+                        </tr>
+                        
+                        <tr>
+                            <td>004</td>
+                            <td>
+                                <div class="cell-title">Samsung 4K Monitor 32"</div>
+                                <div class="cell-url cell-truncate">https://shop.example.com/products/samsung-monitor-32</div>
+                            </td>
+                            <td><span class="price-tag">$449.00</span></td>
+                            <td style="color: var(--warning);">Stock limité (5)</td>
+                            <td>Moniteurs</td>
+                            <td>
+                                <div class="action-menu">
+                                    <button class="action-btn">👁️</button>
+                                    <button class="action-btn">✏️</button>
+                                    <button class="action-btn">🗑️</button>
+                                </div>
+                            </td>
+                        </tr>
+                        
+                        <tr>
+                            <td>005</td>
+                            <td>
+                                <div class="cell-title">Logitech MX Master 3S</div>
+                                <div class="cell-url cell-truncate">https://shop.example.com/products/logitech-mx-master-3s</div>
+                            </td>
+                            <td><span class="price-tag">$99.99</span></td>
+                            <td style="color: var(--success);">En stock (234)</td>
+                            <td>Périphériques</td>
+                            <td>
+                                <div class="action-menu">
+                                    <button class="action-btn">👁️</button>
+                                    <button class="action-btn">✏️</button>
+                                    <button class="action-btn">🗑️</button>
+                                </div>
+                            </td>
+                        </tr>
+                        
+                        <tr>
+                            <td>006</td>
+                            <td>
+                                <div class="cell-title">MacBook Pro 16" M3 Max</div>
+                                <div class="cell-url cell-truncate">https://shop.example.com/products/macbook-pro-16-m3</div>
+                            </td>
+                            <td><span class="price-tag">$3,499.00</span></td>
+                            <td style="color: var(--success);">En stock (12)</td>
+                            <td>Ordinateurs</td>
+                            <td>
+                                <div class="action-menu">
+                                    <button class="action-btn">👁️</button>
+                                    <button class="action-btn">✏️</button>
+                                    <button class="action-btn">🗑️</button>
+                                </div>
+                            </td>
+                        </tr>
+                        
+                        <tr>
+                            <td>007</td>
+                            <td>
+                                <div class="cell-title">iPad Pro 12.9" M2</div>
+                                <div class="cell-url cell-truncate">https://shop.example.com/products/ipad-pro-129-m2</div>
+                            </td>
+                            <td><span class="price-tag">$1,099.00</span></td>
+                            <td style="color: var(--success);">En stock (67)</td>
+                            <td>Tablettes</td>
+                            <td>
+                                <div class="action-menu">
+                                    <button class="action-btn">👁️</button>
+                                    <button class="action-btn">✏️</button>
+                                    <button class="action-btn">🗑️</button>
+                                </div>
+                            </td>
+                        </tr>
+                        
+                        <tr>
+                            <td>008</td>
+                            <td>
+                                <div class="cell-title">Canon EOS R5 Camera</div>
+                                <div class="cell-url cell-truncate">https://shop.example.com/products/canon-eos-r5</div>
+                            </td>
+                            <td><span class="price-tag">$3,899.00</span></td>
+                            <td style="color: var(--error);">Rupture de stock</td>
+                            <td>Caméras</td>
+                            <td>
+                                <div class="action-menu">
+                                    <button class="action-btn">👁️</button>
+                                    <button class="action-btn">✏️</button>
+                                    <button class="action-btn">🗑️</button>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <div class="pagination">
+                    <div class="pagination-info">Affichage 1-20 sur 1,245 éléments</div>
+                    <div class="pagination-controls">
+                        <button class="page-btn">◀</button>
+                        <button class="page-btn active">1</button>
+                        <button class="page-btn">2</button>
+                        <button class="page-btn">3</button>
+                        <button class="page-btn">...</button>
+                        <button class="page-btn">63</button>
+                        <button class="page-btn">▶</button>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+    
+    <script>
+        // Filter buttons
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+            });
+        });
+        
+        // Export buttons with visual feedback
+        document.querySelectorAll('.export-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const format = this.textContent.trim();
+                this.style.transform = 'scale(0.95)';
+                setTimeout(() => {
+                    this.style.transform = 'scale(1)';
+                    alert(`Export ${format} lancé ! Téléchargement en cours...`);
+                }, 150);
+            });
+        });
+        
+        // Search functionality
+        const searchInput = document.querySelector('.search-input');
+        searchInput.addEventListener('input', function(e) {
+            const value = e.target.value.toLowerCase();
+            document.querySelectorAll('.data-table tbody tr').forEach(row => {
+                const text = row.textContent.toLowerCase();
+                row.style.display = text.includes(value) ? '' : 'none';
+            });
+        });
+    </script>
+</body>
+</html>

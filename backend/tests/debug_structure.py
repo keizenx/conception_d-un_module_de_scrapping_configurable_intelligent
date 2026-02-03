@@ -15,13 +15,13 @@ if products:
     print(f"  Tag: {parent.name}")
     print(f"  Classes: {parent.get('class', [])}")
     print(f"  ID: {parent.get('id', 'N/A')}")
-    
-    siblings = [ch for ch in parent.find_all(recursive=False) if hasattr(ch, 'name')]
+
+    siblings = [ch for ch in parent.find_all(recursive=False) if hasattr(ch, "name")]
     print(f"\n  Enfants directs du parent: {len(siblings)}")
-    
-    product_siblings = [ch for ch in siblings if ch.name == 'li']
+
+    product_siblings = [ch for ch in siblings if ch.name == "li"]
     print(f"  Enfants <li>: {len(product_siblings)}")
-    
+
     print(f"\n  Signatures des enfants:")
     for i, ch in enumerate(siblings[:5]):
         classes = ch.get("class") or []

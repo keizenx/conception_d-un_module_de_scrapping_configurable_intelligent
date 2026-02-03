@@ -1,0 +1,302 @@
+/* frontend/src/components/NotificationCenter/NotificationCenter.css */
+/* Styles pour le centre de notifications et la barre de progression */
+/* Affiche les toasts et l'indicateur d'analyse/scraping en cours */
+/* RELEVANT FILES: NotificationCenter.jsx, ScrapingContext.jsx */
+
+/* Barre de progression globale en haut de l'écran */
+.scraping-progress-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 99999;
+  background: linear-gradient(135deg, #141419, #1a1a20);
+  border-bottom: 1px solid rgba(255, 77, 0, 0.3);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  animation: slideDown 0.3s ease;
+  pointer-events: auto;
+}
+
+@keyframes slideDown {
+  from {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Item de progression individuel */
+.progress-item {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.progress-item:last-child {
+  border-bottom: none;
+}
+
+.progress-item.analysis .progress-title {
+  color: #00E5FF;
+}
+
+.progress-item.analysis .progress-track .progress-fill {
+  background: linear-gradient(90deg, #00E5FF, #7B61FF);
+}
+
+.progress-item.scraping .progress-title {
+  color: #FF4D00;
+}
+
+.progress-step {
+  font-size: 0.75rem;
+  color: #00E5FF;
+  font-style: italic;
+}
+
+@keyframes slideDown {
+  from {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.progress-content {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 2rem;
+}
+
+.progress-icon {
+  font-size: 1.5rem;
+}
+
+.progress-icon .spinner {
+  display: inline-block;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.progress-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.progress-title {
+  font-weight: 600;
+  color: #FF4D00;
+  font-size: 0.9rem;
+}
+
+.progress-url {
+  font-size: 0.8rem;
+  color: #A0A0B0;
+  max-width: 400px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.progress-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.progress-count {
+  font-size: 0.85rem;
+  color: #00E5FF;
+  font-weight: 600;
+}
+
+.progress-view-btn {
+  padding: 0.4rem 1rem;
+  background: rgba(255, 77, 0, 0.2);
+  border: 1px solid #FF4D00;
+  border-radius: 6px;
+  color: #FF4D00;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.progress-view-btn:hover {
+  background: #FF4D00;
+  color: white;
+}
+
+.progress-track {
+  height: 3px;
+  background: rgba(255, 77, 0, 0.1);
+}
+
+.progress-track .progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #FF4D00, #00E5FF);
+  transition: width 0.5s ease;
+  animation: pulse-glow 2s infinite;
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 5px #FF4D00;
+  }
+  50% {
+    box-shadow: 0 0 15px #FF4D00, 0 0 25px #00E5FF;
+  }
+}
+
+/* Container des notifications toast */
+.notification-container {
+  position: fixed;
+  bottom: 2rem;
+  right: 2rem;
+  z-index: 99999;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-width: 400px;
+  pointer-events: auto;
+}
+
+/* Toast de notification */
+.notification-toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+  background: #1a1a20;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  animation: slideInRight 0.3s ease;
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.notification-toast.notification-success {
+  border-color: rgba(0, 255, 136, 0.3);
+  background: linear-gradient(135deg, #1a1a20, rgba(0, 255, 136, 0.05));
+}
+
+.notification-toast.notification-error {
+  border-color: rgba(255, 59, 59, 0.3);
+  background: linear-gradient(135deg, #1a1a20, rgba(255, 59, 59, 0.05));
+}
+
+.notification-toast.notification-warning {
+  border-color: rgba(255, 184, 0, 0.3);
+  background: linear-gradient(135deg, #1a1a20, rgba(255, 184, 0, 0.05));
+}
+
+.notification-toast.notification-info {
+  border-color: rgba(0, 229, 255, 0.3);
+  background: linear-gradient(135deg, #1a1a20, rgba(0, 229, 255, 0.05));
+}
+
+.notification-icon {
+  font-size: 1.25rem;
+  flex-shrink: 0;
+}
+
+.notification-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.notification-title {
+  font-weight: 600;
+  color: #FFFFFF;
+  font-size: 0.95rem;
+  margin-bottom: 0.25rem;
+}
+
+.notification-message {
+  font-size: 0.85rem;
+  color: #A0A0B0;
+  word-wrap: break-word;
+}
+
+.notification-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.notification-action-btn {
+  padding: 0.35rem 0.75rem;
+  background: rgba(0, 229, 255, 0.1);
+  border: 1px solid #00E5FF;
+  border-radius: 6px;
+  color: #00E5FF;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.notification-action-btn:hover {
+  background: #00E5FF;
+  color: #0A0A0F;
+}
+
+.notification-close {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: #606070;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  font-size: 0.9rem;
+}
+
+.notification-close:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #FFFFFF;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .notification-container {
+    left: 1rem;
+    right: 1rem;
+    max-width: none;
+  }
+  
+  .progress-content {
+    padding: 0.5rem 1rem;
+  }
+  
+  .progress-url {
+    max-width: 150px;
+  }
+}

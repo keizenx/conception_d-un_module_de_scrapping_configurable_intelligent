@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - SCRAPER PRO</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --primary: #FF4D00;
+            --primary-dark: #CC3D00;
+            --accent: #00E5FF;
+            --success: #00FF88;
+            --warning: #FFB800;
+            --error: #FF3B3B;
+            --bg-dark: #0A0A0F;
+            --bg-darker: #050508;
+            --bg-card: #141419;
+            --bg-hover: #1A1A20;
+            --text-primary: #FFFFFF;
+            --text-secondary: #A0A0B0;
+            --text-muted: #606070;
+            --border: rgba(255, 77, 0, 0.1);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            overflow-x: hidden;
+        }
+        
+        .app-container {
+            display: flex;
+            min-height: 100vh;
+        }
+        
+        /* Sidebar */
+        .sidebar {
+            width: 280px;
+            background: var(--bg-darker);
+            border-right: 1px solid var(--border);
+            padding: 2rem 0;
+            position: fixed;
+            height: 100vh;
+            overflow-y: auto;
+        }
+        
+        .logo {
+            padding: 0 2rem;
+            margin-bottom: 3rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 1.8rem;
+            letter-spacing: 2px;
+            color: var(--primary);
+        }
+        
+        .logo-icon {
+            width: 36px;
+            height: 36px;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+        }
+        
+        .nav-section {
+            margin-bottom: 2rem;
+        }
+        
+        .nav-title {
+            padding: 0 2rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 0.5rem;
+        }
+        
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 0.875rem 2rem;
+            color: var(--text-secondary);
+            text-decoration: none;
+            transition: all 0.3s ease;
+            border-left: 3px solid transparent;
+            font-weight: 500;
+        }
+        
+        .nav-item:hover {
+            background: rgba(255, 77, 0, 0.05);
+            color: var(--text-primary);
+            border-left-color: var(--primary);
+        }
+        
+        .nav-item.active {
+            background: rgba(255, 77, 0, 0.1);
+            color: var(--primary);
+            border-left-color: var(--primary);
+        }
+        
+        .nav-icon {
+            font-size: 1.25rem;
+            width: 24px;
+            text-align: center;
+        }
+        
+        /* Main Content */
+        .main-content {
+            margin-left: 280px;
+            flex: 1;
+            padding: 2rem 3rem;
+        }
+        
+        /* Header */
+        .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 3rem;
+        }
+        
+        .page-title {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 2.5rem;
+            letter-spacing: 2px;
+        }
+        
+        .header-actions {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+        
+        .user-profile {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.5rem 1rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 50px;
+        }
+        
+        .avatar {
+            width: 32px;
+            height: 32px;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 0.85rem;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: white;
+            padding: 0.875rem 2rem;
+            border: none;
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 0.95rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(255, 77, 0, 0.3);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 25px rgba(255, 77, 0, 0.5);
+        }
+        
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1.5rem;
+            margin-bottom: 3rem;
+        }
+        
+        .stat-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 1.75rem;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+        
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--primary), var(--accent));
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        
+        .stat-card:hover::before {
+            opacity: 1;
+        }
+        
+        .stat-card:hover {
+            border-color: rgba(255, 77, 0, 0.3);
+            transform: translateY(-5px);
+        }
+        
+        .stat-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 1rem;
+        }
+        
+        .stat-label {
+            font-size: 0.875rem;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+        
+        .stat-icon {
+            width: 40px;
+            height: 40px;
+            background: rgba(255, 77, 0, 0.1);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.25rem;
+        }
+        
+        .stat-value {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 2.5rem;
+            letter-spacing: 1px;
+            margin-bottom: 0.5rem;
+        }
+        
+        .stat-change {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+        
+        .change-positive {
+            color: var(--success);
+        }
+        
+        .change-negative {
+            color: var(--error);
+        }
+        
+        /* Content Grid */
+        .content-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+        
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 2rem;
+        }
+        
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+        }
+        
+        .card-title {
+            font-size: 1.25rem;
+            font-weight: 700;
+        }
+        
+        .card-action {
+            color: var(--primary);
+            font-size: 0.875rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.3s ease;
+        }
+        
+        .card-action:hover {
+            opacity: 0.8;
+        }
+        
+        /* Chart Container */
+        .chart-container {
+            position: relative;
+            height: 300px;
+            margin-bottom: 1rem;
+        }
+        
+        /* Recent Sessions */
+        .session-list {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        
+        .session-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1.25rem;
+            background: var(--bg-darker);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        
+        .session-item:hover {
+            background: var(--bg-hover);
+            border-color: rgba(255, 77, 0, 0.3);
+        }
+        
+        .session-info {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        
+        .session-status {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        
+        .status-success { background: var(--success); box-shadow: 0 0 10px var(--success); }
+        .status-error { background: var(--error); box-shadow: 0 0 10px var(--error); }
+        .status-warning { background: var(--warning); box-shadow: 0 0 10px var(--warning); }
+        
+        .session-details h4 {
+            font-size: 0.95rem;
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+        
+        .session-details p {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            font-family: 'JetBrains Mono', monospace;
+        }
+        
+        .session-meta {
+            text-align: right;
+        }
+        
+        .session-time {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-bottom: 0.25rem;
+        }
+        
+        .session-count {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+        }
+        
+        /* Quick Actions */
+        .quick-actions {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 1rem;
+        }
+        
+        .quick-action-btn {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 1.25rem;
+            background: var(--bg-darker);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            color: var(--text-primary);
+        }
+        
+        .quick-action-btn:hover {
+            background: var(--bg-hover);
+            border-color: rgba(255, 77, 0, 0.3);
+            transform: translateX(5px);
+        }
+        
+        .action-icon {
+            width: 48px;
+            height: 48px;
+            background: rgba(255, 77, 0, 0.1);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            flex-shrink: 0;
+        }
+        
+        .action-text h4 {
+            font-size: 0.95rem;
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+        
+        .action-text p {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+        
+        /* Activity Feed */
+        .activity-feed {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+        
+        .activity-item {
+            display: flex;
+            gap: 1rem;
+            padding-bottom: 1.5rem;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        .activity-item:last-child {
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+        
+        .activity-icon {
+            width: 40px;
+            height: 40px;
+            background: rgba(255, 77, 0, 0.1);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        
+        .activity-content h4 {
+            font-size: 0.9rem;
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+        
+        .activity-content p {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-bottom: 0.5rem;
+        }
+        
+        .activity-time {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            font-family: 'JetBrains Mono', monospace;
+        }
+        
+        @media (max-width: 1400px) {
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            
+            .content-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        @media (max-width: 968px) {
+            .sidebar {
+                transform: translateX(-100%);
+            }
+            
+            .main-content {
+                margin-left: 0;
+            }
+            
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo">
+                <div class="logo-icon">⚡</div>
+                SCRAPER PRO
+            </div>
+            
+            <nav>
+                <div class="nav-section">
+                    <div class="nav-title">Principal</div>
+                    <a href="#" class="nav-item active">
+                        <span class="nav-icon">📊</span>
+                        Dashboard
+                    </a>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">🔍</span>
+                        Analyse
+                    </a>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">📈</span>
+                        Résultats
+                    </a>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">📋</span>
+                        Rapports
+                    </a>
+                </div>
+                
+                <div class="nav-section">
+                    <div class="nav-title">Outils</div>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">⚙️</span>
+                        Paramètres
+                    </a>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">📚</span>
+                        Documentation
+                    </a>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">💬</span>
+                        Support
+                    </a>
+                </div>
+            </nav>
+        </aside>
+        
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Header -->
+            <header class="page-header">
+                <h1 class="page-title">Dashboard</h1>
+                <div class="header-actions">
+                    <button class="btn-primary">
+                        <span>➕</span>
+                        Nouveau scraping
+                    </button>
+                    <div class="user-profile">
+                        <div class="avatar">OR</div>
+                        <span>Ornella</span>
+                    </div>
+                </div>
+            </header>
+            
+            <!-- Stats Grid -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <div>
+                            <div class="stat-label">Sessions totales</div>
+                        </div>
+                        <div class="stat-icon">🚀</div>
+                    </div>
+                    <div class="stat-value">1,247</div>
+                    <div class="stat-change change-positive">
+                        <span>↗</span>
+                        <span>+12% ce mois</span>
+                    </div>
+                </div>
+                
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <div>
+                            <div class="stat-label">Données extraites</div>
+                        </div>
+                        <div class="stat-icon">📦</div>
+                    </div>
+                    <div class="stat-value">45.2K</div>
+                    <div class="stat-change change-positive">
+                        <span>↗</span>
+                        <span>+28% ce mois</span>
+                    </div>
+                </div>
+                
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <div>
+                            <div class="stat-label">Taux de succès</div>
+                        </div>
+                        <div class="stat-icon">✅</div>
+                    </div>
+                    <div class="stat-value">98.5%</div>
+                    <div class="stat-change change-positive">
+                        <span>↗</span>
+                        <span>+2.3% ce mois</span>
+                    </div>
+                </div>
+                
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <div>
+                            <div class="stat-label">Temps moyen</div>
+                        </div>
+                        <div class="stat-icon">⚡</div>
+                    </div>
+                    <div class="stat-value">2.4s</div>
+                    <div class="stat-change change-negative">
+                        <span>↘</span>
+                        <span>-0.3s ce mois</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Content Grid -->
+            <div class="content-grid">
+                <!-- Activity Chart -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">Activité (7 derniers jours)</h3>
+                        <span class="card-action">Voir tout →</span>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="activityChart"></canvas>
+                    </div>
+                </div>
+                
+                <!-- Quick Actions -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">Actions rapides</h3>
+                    </div>
+                    <div class="quick-actions">
+                        <a href="#" class="quick-action-btn">
+                            <div class="action-icon">🔍</div>
+                            <div class="action-text">
+                                <h4>Analyser une URL</h4>
+                                <p>Configuration rapide</p>
+                            </div>
+                        </a>
+                        <a href="#" class="quick-action-btn">
+                            <div class="action-icon">📥</div>
+                            <div class="action-text">
+                                <h4>Importer config</h4>
+                                <p>Charger JSON/CSV</p>
+                            </div>
+                        </a>
+                        <a href="#" class="quick-action-btn">
+                            <div class="action-icon">📊</div>
+                            <div class="action-text">
+                                <h4>Voir rapports</h4>
+                                <p>Historique complet</p>
+                            </div>
+                        </a>
+                        <a href="#" class="quick-action-btn">
+                            <div class="action-icon">⚙️</div>
+                            <div class="action-text">
+                                <h4>API Manager</h4>
+                                <p>Clés et webhooks</p>
+                            </div>
+                        </a>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Recent Sessions -->
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">Sessions récentes</h3>
+                    <span class="card-action">Historique complet →</span>
+                </div>
+                <div class="session-list">
+                    <div class="session-item">
+                        <div class="session-info">
+                            <div class="session-status status-success"></div>
+                            <div class="session-details">
+                                <h4>E-commerce Product Scraping</h4>
+                                <p>https://example-shop.com/products</p>
+                            </div>
+                        </div>
+                        <div class="session-meta">
+                            <div class="session-time">Il y a 2 heures</div>
+                            <div class="session-count">1,245 éléments</div>
+                        </div>
+                    </div>
+                    
+                    <div class="session-item">
+                        <div class="session-info">
+                            <div class="session-status status-success"></div>
+                            <div class="session-details">
+                                <h4>News Articles Extraction</h4>
+                                <p>https://news-site.com/latest</p>
+                            </div>
+                        </div>
+                        <div class="session-meta">
+                            <div class="session-time">Il y a 5 heures</div>
+                            <div class="session-count">487 éléments</div>
+                        </div>
+                    </div>
+                    
+                    <div class="session-item">
+                        <div class="session-info">
+                            <div class="session-status status-warning"></div>
+                            <div class="session-details">
+                                <h4>Real Estate Listings</h4>
+                                <p>https://real-estate.com/listings</p>
+                            </div>
+                        </div>
+                        <div class="session-meta">
+                            <div class="session-time">Hier</div>
+                            <div class="session-count">892 éléments</div>
+                        </div>
+                    </div>
+                    
+                    <div class="session-item">
+                        <div class="session-info">
+                            <div class="session-status status-success"></div>
+                            <div class="session-details">
+                                <h4>Job Postings Aggregation</h4>
+                                <p>https://jobs-board.com/search</p>
+                            </div>
+                        </div>
+                        <div class="session-meta">
+                            <div class="session-time">Il y a 2 jours</div>
+                            <div class="session-count">3,421 éléments</div>
+                        </div>
+                    </div>
+                    
+                    <div class="session-item">
+                        <div class="session-info">
+                            <div class="session-status status-error"></div>
+                            <div class="session-details">
+                                <h4>Social Media Analytics</h4>
+                                <p>https://social-platform.com/posts</p>
+                            </div>
+                        </div>
+                        <div class="session-meta">
+                            <div class="session-time">Il y a 3 jours</div>
+                            <div class="session-count">0 éléments</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+    
+    <script>
+        // Activity Chart
+        const ctx = document.getElementById('activityChart').getContext('2d');
+        const gradient = ctx.createLinearGradient(0, 0, 0, 300);
+        gradient.addColorStop(0, 'rgba(255, 77, 0, 0.3)');
+        gradient.addColorStop(1, 'rgba(255, 77, 0, 0.0)');
+        
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'],
+                datasets: [{
+                    label: 'Sessions',
+                    data: [45, 62, 55, 78, 85, 67, 92],
+                    borderColor: '#FF4D00',
+                    backgroundColor: gradient,
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.4,
+                    pointBackgroundColor: '#FF4D00',
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2,
+                    pointRadius: 5,
+                    pointHoverRadius: 7
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        backgroundColor: '#141419',
+                        borderColor: '#FF4D00',
+                        borderWidth: 1,
+                        titleColor: '#FFFFFF',
+                        bodyColor: '#A0A0B0',
+                        padding: 12,
+                        displayColors: false
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: {
+                            color: 'rgba(255, 77, 0, 0.1)',
+                            drawBorder: false
+                        },
+                        ticks: {
+                            color: '#606070'
+                        }
+                    },
+                    x: {
+                        grid: {
+                            display: false
+                        },
+                        ticks: {
+                            color: '#606070'
+                        }
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+</html>
