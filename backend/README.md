@@ -247,6 +247,31 @@ playwright install chromium
 - Essayez avec `use_js: true` si le contenu est chargé en JavaScript
 - Utilisez les scripts de debug dans `tests/` pour analyser la structure
 
+## ✉️ Configuration SMTP (confirmation d’e‑mail)
+
+### Variables d’environnement (fichier `.env`)
+
+Créez un fichier `.env` dans `backend/` (ou copiez `backend/.env.example`) et renseignez:
+
+```
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_USER=your_smtp_username
+SMTP_PASSWORD=your_smtp_password
+MAIL_FROM=no-reply@example.com
+CONFIRM_BASE_URL=http://localhost:8000/auth/confirm
+APP_NAME=Intelligent Scraper
+```
+
+### Endpoints
+- `POST /auth/register` → génère un jeton et envoie un e‑mail de confirmation
+- `GET /auth/confirm?token=...` → valide le jeton et confirme l’adresse
+
+### Notes
+- Les e‑mails utilisent un **template HTML** moderne avec fallback texte
+- Pour Gmail, activez SMTP (TLS 587) et utilisez un **mot de passe d’application**
+- Le `.env` est ignoré par Git (voir `.gitignore`)
+
 ## 📚 Documentation
 
 - `PROGRESS.md` : Progression détaillée et améliorations

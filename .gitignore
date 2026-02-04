@@ -6,6 +6,9 @@ build/
 .vscode/
 .idea/
 *.log
+*.env
+**/.env
+backend/.env
 venv/
 __pycache__/
 *.pyc
