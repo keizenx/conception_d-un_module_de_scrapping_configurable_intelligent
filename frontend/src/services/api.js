@@ -97,6 +97,75 @@ class APIService {
     return this.handleResponse(response);
   }
 
+  // ==================== USER PROFILE ====================
+  
+  async getUserProfile() {
+    const response = await fetch(`${API_BASE_URL}/auth/profile/`, {
+      method: 'GET',
+      headers: this.getHeaders(),
+    });
+    
+    return this.handleResponse(response);
+  }
+  
+  async updateUserProfile(data) {
+    const response = await fetch(`${API_BASE_URL}/auth/profile/`, {
+      method: 'PUT',
+      headers: this.getHeaders(),
+      body: JSON.stringify(data),
+    });
+    
+    return this.handleResponse(response);
+  }
+  
+  async changePassword(currentPassword, newPassword) {
+    const response = await fetch(`${API_BASE_URL}/auth/change-password/`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({ 
+        current_password: currentPassword, 
+        new_password: newPassword 
+      }),
+    });
+    
+    return this.handleResponse(response);
+  }
+  
+  async deleteUserAccount() {
+    const response = await fetch(`${API_BASE_URL}/auth/delete-account/`, {
+      method: 'DELETE',
+      headers: this.getHeaders(),
+    });
+    
+    return this.handleResponse(response);
+  }
+  
+  async uploadAvatar(file) {
+    const token = localStorage.getItem('scraper_pro_token');
+    const formData = new FormData();
+    formData.append('avatar', file);
+    
+    const response = await fetch(`${API_BASE_URL}/auth/upload-avatar/`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Token ${token}`,
+        // Ne pas mettre Content-Type pour FormData, le browser le gère
+      },
+      body: formData,
+    });
+    
+    return this.handleResponse(response);
+  }
+  
+  async deleteAvatar() {
+    const response = await fetch(`${API_BASE_URL}/auth/delete-avatar/`, {
+      method: 'DELETE',
+      headers: this.getHeaders(),
+    });
+    
+    return this.handleResponse(response);
+  }
+
   // ==================== DASHBOARD ====================
   
   async getDashboardStats() {

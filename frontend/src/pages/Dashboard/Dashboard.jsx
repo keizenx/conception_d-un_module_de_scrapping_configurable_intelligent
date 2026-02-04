@@ -197,8 +197,19 @@ const Dashboard = () => {
                             <span className="material-icons">add</span>
                             Nouveau scraping
                         </button>
-                        <div className="user-profile">
-                            <div className="avatar">{user?.name?.substring(0, 2).toUpperCase() || 'U'}</div>
+                        <div className="user-profile" onClick={() => navigate('/profile')} style={{ cursor: 'pointer' }} title="Mon profil">
+                            {user?.avatar ? (
+                                <div className="avatar">
+                                    <img
+                                        src={user.avatar}
+                                        alt="Avatar"
+                                        className="avatar-img"
+                                        style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover' }}
+                                    />
+                                </div>
+                            ) : (
+                                <div className="avatar">{user?.name?.substring(0, 2).toUpperCase() || 'U'}</div>
+                            )}
                             <span>{user?.name || 'Utilisateur'}</span>
                         </div>
                         <button className="btn-logout" onClick={async () => { await logout(); navigate('/login'); }}>

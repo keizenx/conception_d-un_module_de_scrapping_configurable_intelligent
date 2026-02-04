@@ -19,10 +19,15 @@ export const AuthProvider = ({ children }) => {
     const token = localStorage.getItem('scraper_pro_token');
     if (token) {
       // Récupérer les infos utilisateur depuis l'API
-      api.getCurrentUser()
+      api.getUserProfile()
         .then(userData => {
-          setUser(userData);
-          localStorage.setItem('scraper_pro_user', JSON.stringify(userData));
+          // On mappe avatar_url -> avatar pour uniformiser partout
+          const mappedUser = {
+            ...userData,
+            avatar: userData.avatar_url || null
+          };
+          setUser(mappedUser);
+          localStorage.setItem('scraper_pro_user', JSON.stringify(mappedUser));
         })
         .catch(error => {
           console.error('Erreur lors de la récupération de l\'utilisateur:', error);
@@ -45,12 +50,11 @@ export const AuthProvider = ({ children }) => {
         id: data.user.id,
         email: data.user.email,
         name: data.user.name,
-        role: data.user.role || 'user'
+        role: data.user.role || 'user',
+        avatar: data.user.avatar_url || null
       };
-      
       setUser(userData);
       localStorage.setItem('scraper_pro_user', JSON.stringify(userData));
-      
       return { success: true, user: userData };
     } catch (error) {
       return { success: false, error: error.message || 'Email ou mot de passe incorrect' };
@@ -65,12 +69,11 @@ export const AuthProvider = ({ children }) => {
         id: data.user.id,
         email: data.user.email,
         name: data.user.name,
-        role: data.user.role || 'user'
+        role: data.user.role || 'user',
+        avatar: data.user.avatar_url || null
       };
-      
       setUser(userData);
       localStorage.setItem('scraper_pro_user', JSON.stringify(userData));
-      
       return { success: true, user: userData };
     } catch (error) {
       return { success: false, error: error.message || 'Erreur lors de l\'inscription' };
@@ -82,13 +85,20 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   };
 
+  const updateUser = (updatedData) => {
+    const updatedUser = { ...user, ...updatedData };
+    setUser(updatedUser);
+    localStorage.setItem('scraper_pro_user', JSON.stringify(updatedUser));
+  };
+
   const value = {
     user,
     isLoading,
     isAuthenticated: !!user,
     login,
     register,
-    logout
+    logout,
+    updateUser
   };
 
   return (

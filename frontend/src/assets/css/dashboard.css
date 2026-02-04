@@ -106,6 +106,13 @@
     background: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: 50px;
+    transition: all 0.3s ease;
+}
+
+.user-profile:hover {
+    background: var(--bg-hover);
+    border-color: rgba(255, 77, 0, 0.3);
+    transform: translateY(-1px);
 }
 
 .avatar {
