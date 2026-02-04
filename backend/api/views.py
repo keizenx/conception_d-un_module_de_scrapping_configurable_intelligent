@@ -85,6 +85,11 @@ class AuthViewSet(viewsets.ViewSet):
         serializer = LoginSerializer(data=request.data)
         if serializer.is_valid():
             user = serializer.validated_data['user']
+            
+            # Mettre à jour last_login
+            user.last_login = timezone.now()
+            user.save(update_fields=['last_login'])
+            
             token, created = Token.objects.get_or_create(user=user)
             return Response({
                 'token': token.key,
@@ -114,6 +119,200 @@ class AuthViewSet(viewsets.ViewSet):
         """
         serializer = UserSerializer(request.user)
         return Response(serializer.data)
+    
+    @action(detail=False, methods=['get', 'put'], permission_classes=[IsAuthenticated], url_path='profile')
+    def profile(self, request):
+        """
+        Récupère ou met à jour le profil de l'utilisateur.
+        GET/PUT /api/auth/profile/
+        """
+        user = request.user
+        
+        if request.method == 'GET':
+            # Statistiques de l'utilisateur
+            total_sessions = ScrapingSession.objects.filter(user=user).count()
+            data_extracted = ScrapedData.objects.filter(session__user=user).count()
+            
+            # URL de l'avatar
+            avatar_url = None
+            if user.avatar:
+                avatar_url = request.build_absolute_uri(user.avatar.url)
+            
+            return Response({
+                'id': user.id,
+                'name': f"{user.first_name} {user.last_name}".strip() or user.username,
+                'email': user.email,
+                'bio': user.bio or '',
+                'company': user.company or '',
+                'avatar_url': avatar_url,
+                'role': 'admin' if user.is_staff else 'user',
+                'total_sessions': total_sessions,
+                'data_extracted': data_extracted,
+                'member_since': user.date_joined.strftime('%d/%m/%Y'),
+                'last_login': user.last_login.strftime('%d/%m/%Y %H:%M') if user.last_login else 'N/A'
+            })
+        
+        elif request.method == 'PUT':
+            # Mise à jour du profil
+            name = request.data.get('name', '')
+            email = request.data.get('email', user.email)
+            bio = request.data.get('bio', '')
+            company = request.data.get('company', '')
+            
+            # Séparer le nom complet en prénom/nom
+            name_parts = name.split(' ', 1)
+            user.first_name = name_parts[0] if name_parts else ''
+            user.last_name = name_parts[1] if len(name_parts) > 1 else ''
+            user.email = email
+            
+            # Si les champs bio et company existent dans le modèle
+            if hasattr(user, 'bio'):
+                user.bio = bio
+            if hasattr(user, 'company'):
+                user.company = company
+            
+            user.save()
+            
+            return Response({
+                'id': user.id,
+                'name': f"{user.first_name} {user.last_name}".strip() or user.username,
+                'email': user.email,
+                'bio': getattr(user, 'bio', ''),
+                'company': getattr(user, 'company', ''),
+                'role': 'admin' if user.is_staff else 'user',
+                'message': 'Profil mis à jour avec succès'
+            })
+    
+    @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated], url_path='change-password')
+    def change_password(self, request):
+        """
+        Modifie le mot de passe de l'utilisateur.
+        POST /api/auth/change-password/
+        """
+        user = request.user
+        current_password = request.data.get('current_password')
+        new_password = request.data.get('new_password')
+        
+        if not current_password or not new_password:
+            return Response({
+                'detail': 'Mot de passe actuel et nouveau mot de passe requis'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Vérifier le mot de passe actuel
+        if not user.check_password(current_password):
+            return Response({
+                'detail': 'Mot de passe actuel incorrect'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Valider le nouveau mot de passe
+        if len(new_password) < 8:
+            return Response({
+                'detail': 'Le nouveau mot de passe doit contenir au moins 8 caractères'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Définir le nouveau mot de passe
+        user.set_password(new_password)
+        user.save()
+        
+        # Mettre à jour le token
+        Token.objects.filter(user=user).delete()
+        token = Token.objects.create(user=user)
+        
+        return Response({
+            'message': 'Mot de passe modifié avec succès',
+            'token': token.key
+        })
+    
+    @action(detail=False, methods=['delete'], permission_classes=[IsAuthenticated], url_path='delete-account')
+    def delete_account(self, request):
+        """
+        Supprime le compte de l'utilisateur.
+        DELETE /api/auth/delete-account/
+        """
+        user = request.user
+        
+        # Supprimer toutes les données associées
+        ScrapingSession.objects.filter(user=user).delete()
+        Report.objects.filter(user=user).delete()
+        ApiKey.objects.filter(user=user).delete()
+        
+        # Supprimer le token
+        try:
+            user.auth_token.delete()
+        except:
+            pass
+        
+        # Supprimer l'utilisateur
+        user.delete()
+        
+        return Response({
+            'message': 'Compte supprimé avec succès'
+        }, status=status.HTTP_200_OK)
+    
+    @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated], url_path='upload-avatar')
+    def upload_avatar(self, request):
+        """
+        Upload une photo de profil.
+        POST /api/auth/upload-avatar/
+        """
+        user = request.user
+        
+        if 'avatar' not in request.FILES:
+            return Response({
+                'detail': 'Aucun fichier fourni'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        avatar_file = request.FILES['avatar']
+        
+        # Vérifier le type de fichier
+        allowed_types = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+        if avatar_file.content_type not in allowed_types:
+            return Response({
+                'detail': 'Type de fichier non autorisé. Utilisez JPG, PNG, GIF ou WebP.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Vérifier la taille (max 5MB)
+        if avatar_file.size > 5 * 1024 * 1024:
+            return Response({
+                'detail': 'Le fichier est trop volumineux. Maximum 5 Mo.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Supprimer l'ancien avatar si existant
+        if user.avatar:
+            user.avatar.delete(save=False)
+        
+        # Sauvegarder le nouvel avatar
+        user.avatar = avatar_file
+        user.save()
+        
+        # Construire l'URL complète
+        avatar_url = request.build_absolute_uri(user.avatar.url) if user.avatar else None
+        
+        return Response({
+            'message': 'Photo de profil mise à jour',
+            'avatar_url': avatar_url
+        })
+    
+    @action(detail=False, methods=['delete'], permission_classes=[IsAuthenticated], url_path='delete-avatar')
+    def delete_avatar(self, request):
+        """
+        Supprime la photo de profil.
+        DELETE /api/auth/delete-avatar/
+        """
+        user = request.user
+        
+        if user.avatar:
+            user.avatar.delete(save=False)
+            user.avatar = None
+            user.save()
+            
+            return Response({
+                'message': 'Photo de profil supprimée'
+            })
+        
+        return Response({
+            'detail': 'Aucune photo de profil à supprimer'
+        }, status=status.HTTP_400_BAD_REQUEST)
 
 
 class DashboardViewSet(viewsets.ViewSet):

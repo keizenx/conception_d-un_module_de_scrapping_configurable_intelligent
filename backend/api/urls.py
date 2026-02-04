@@ -29,6 +29,11 @@ urlpatterns = [
     path('auth/login/', AuthViewSet.as_view({'post': 'login'}), name='auth-login'),
     path('auth/logout/', AuthViewSet.as_view({'post': 'logout'}), name='auth-logout'),
     path('auth/me/', AuthViewSet.as_view({'get': 'me'}), name='auth-me'),
+    path('auth/profile/', AuthViewSet.as_view({'get': 'profile', 'put': 'profile'}), name='auth-profile'),
+    path('auth/change-password/', AuthViewSet.as_view({'post': 'change_password'}), name='auth-change-password'),
+    path('auth/delete-account/', AuthViewSet.as_view({'delete': 'delete_account'}), name='auth-delete-account'),
+    path('auth/upload-avatar/', AuthViewSet.as_view({'post': 'upload_avatar'}), name='auth-upload-avatar'),
+    path('auth/delete-avatar/', AuthViewSet.as_view({'delete': 'delete_avatar'}), name='auth-delete-avatar'),
     
     # Routes du dashboard
     path('dashboard/stats/', DashboardViewSet.as_view({'get': 'stats'}), name='dashboard-stats'),

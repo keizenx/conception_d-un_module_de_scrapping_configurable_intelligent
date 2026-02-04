@@ -14,10 +14,17 @@ class UserSerializer(serializers.ModelSerializer):
     Serializer pour le modèle User.
     Utilisé pour l'affichage des informations utilisateur.
     """
+    name = serializers.SerializerMethodField()
+    
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'phone', 'company', 'created_at']
+        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'name', 'phone', 'company', 'created_at']
         read_only_fields = ['id', 'created_at']
+    
+    def get_name(self, obj):
+        """Retourne le nom complet ou le username si vide."""
+        full_name = f"{obj.first_name} {obj.last_name}".strip()
+        return full_name if full_name else obj.username
 
 
 class RegisterSerializer(serializers.ModelSerializer):
