@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional, Dict, Any, List
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel, HttpUrl, EmailStr
 from src.core.models import JobStatus
 
 class JobBase(BaseModel):
@@ -24,3 +24,14 @@ class JobResponse(JobBase):
 
 class JobResult(JobResponse):
     result_json: Optional[Dict[str, Any]] = None
+
+class RegisterRequest(BaseModel):
+    email: EmailStr
+
+class RegisterResponse(BaseModel):
+    id: int
+    email: EmailStr
+    is_confirmed: bool
+
+class ConfirmResponse(BaseModel):
+    message: str

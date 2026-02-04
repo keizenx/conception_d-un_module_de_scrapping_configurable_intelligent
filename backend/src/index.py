@@ -4,6 +4,7 @@ from src.api.routes.analyze import router as analyze_router
 from src.api.routes.scrape import router as scrape_router
 from src.api.routes.export import router as export_router
 from src.api.routes.ws import router as ws_router
+from src.api.routes.auth import router as auth_router
 from src.core.database import engine, Base
 from src.core import models
 
@@ -16,3 +17,4 @@ app.include_router(analyze_router)
 app.include_router(scrape_router)
 app.include_router(export_router)
 app.include_router(ws_router)
+app.include_router(auth_router)

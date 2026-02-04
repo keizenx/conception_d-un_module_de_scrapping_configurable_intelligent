@@ -1,6 +1,6 @@
 import enum
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, DateTime, Enum, JSON, Text
+from sqlalchemy import Column, Integer, String, DateTime, Enum, JSON, Text, Boolean, UniqueConstraint
 from src.core.database import Base
 
 class JobStatus(str, enum.Enum):
@@ -28,3 +28,12 @@ class ScrapingJob(Base):
     storage_path = Column(String, nullable=True)  # Path to file if too large
     error_message = Column(Text, nullable=True)
 
+class User(Base):
+    __tablename__ = "users"
+    __table_args__ = (UniqueConstraint("email", name="uq_users_email"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String, index=True, nullable=False)
+    is_confirmed = Column(Boolean, default=False)
+    confirmation_token = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
