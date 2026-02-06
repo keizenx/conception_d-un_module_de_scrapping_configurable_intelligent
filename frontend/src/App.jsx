@@ -5,6 +5,8 @@ import { ScrapingProvider } from './contexts/ScrapingContext';
 import NotificationCenter from './components/NotificationCenter/NotificationCenter';
 import Landing from './pages/Landing/Landing';
 import Login from './pages/Login/Login';
+import ForgotPassword from './pages/Login/ForgotPassword';
+import ResetPassword from './pages/Login/ResetPassword';
 import Register from './pages/Register/Register';
 import Dashboard from './pages/Dashboard/Dashboard';
 import Analysis from './pages/Analysis/Analysis';
@@ -43,6 +45,8 @@ function AppContent() {
       <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/register" element={<Register />} />
         <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
         <Route path="/analysis" element={<ProtectedRoute><Analysis /></ProtectedRoute>} />

@@ -26,6 +26,22 @@ class APIService {
   async handleResponse(response) {
     if (!response.ok) {
       const error = await response.json().catch(() => ({ detail: 'Une erreur est survenue' }));
+      
+      // Si l'erreur est un objet avec des champs (ex: validation Django), on essaie de construire un message
+      if (typeof error === 'object' && !error.detail && !error.message) {
+        // On prend le premier message d'erreur qu'on trouve
+        const firstKey = Object.keys(error)[0];
+        if (firstKey) {
+          const val = error[firstKey];
+          if (Array.isArray(val)) {
+             throw new Error(`${val[0]}`); // On affiche juste le message, pas la clé
+          }
+          if (typeof val === 'string') {
+              throw new Error(`${val}`);
+          }
+        }
+      }
+
       throw new Error(error.detail || error.message || 'Erreur serveur');
     }
     return response.json();
@@ -42,6 +58,11 @@ class APIService {
     
     const data = await this.handleResponse(response);
     
+    // Si 2FA requis, on ne stocke pas encore le token
+    if (data['2fa_required']) {
+      return data;
+    }
+    
     // Stocker le token
     if (data.token) {
       localStorage.setItem('scraper_pro_token', data.token);
@@ -50,18 +71,91 @@ class APIService {
     return data;
   }
 
+  async verify2FA(username, password, code) {
+    const response = await fetch(`${API_BASE_URL}/auth/verify-2fa/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password, code }),
+    });
+    
+    const data = await this.handleResponse(response);
+    
+    // Stocker le token
+    if (data.token) {
+      localStorage.setItem('scraper_pro_token', data.token);
+    }
+    
+    return data;
+  }
+
+  async enable2FA() {
+    const response = await fetch(`${API_BASE_URL}/auth/enable-2fa/`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+    });
+    return this.handleResponse(response);
+  }
+
+  async disable2FA() {
+    const response = await fetch(`${API_BASE_URL}/auth/disable-2fa/`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+    });
+    return this.handleResponse(response);
+  }
+
+  async forgotPassword(email) {
+    const response = await fetch(`${API_BASE_URL}/auth/forgot-password/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+    return this.handleResponse(response);
+  }
+
+  async resetPasswordConfirm(email, code, newPassword) {
+    const response = await fetch(`${API_BASE_URL}/auth/reset-password-confirm/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, code, new_password: newPassword }),
+    });
+    return this.handleResponse(response);
+  }
+
   async register(name, email, password) {
     const response = await fetch(`${API_BASE_URL}/auth/register/`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
-        username: email.split('@')[0], // Utiliser la partie avant @ comme username
+        username: email, // Utiliser l'email comme username pour garantir l'unicité
         email, 
         password,
         password_confirm: password,
         first_name: name.split(' ')[0] || name,
         last_name: name.split(' ').slice(1).join(' ') || ''
       }),
+    });
+    
+    const data = await this.handleResponse(response);
+    
+    // Si vérification requise, on ne stocke pas encore le token
+    if (data.verification_required) {
+        return data;
+    }
+    
+    // Stocker le token
+    if (data.token) {
+      localStorage.setItem('scraper_pro_token', data.token);
+    }
+    
+    return data;
+  }
+
+  async verifyEmail(email, code) {
+    const response = await fetch(`${API_BASE_URL}/auth/verify-email/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, code }),
     });
     
     const data = await this.handleResponse(response);

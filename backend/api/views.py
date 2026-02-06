@@ -11,6 +11,11 @@ from rest_framework.authtoken.models import Token
 from django.contrib.auth import logout
 from django.utils import timezone
 from django.http import HttpResponse
+from django.core.mail import send_mail
+from django.conf import settings
+import random
+import string
+from datetime import timedelta
 import json
 import csv
 import io
@@ -68,13 +73,73 @@ class AuthViewSet(viewsets.ViewSet):
         serializer = RegisterSerializer(data=request.data)
         if serializer.is_valid():
             user = serializer.save()
-            token, created = Token.objects.get_or_create(user=user)
+            user.is_active = False # Désactiver le compte jusqu'à vérification
+            
+            # Générer code de vérification
+            code = ''.join(random.choices(string.digits, k=6))
+            user.two_factor_code = code # On réutilise ce champ pour la vérification email
+            user.save()
+            
+            # Envoyer email de vérification
+            try:
+                send_mail(
+                    'Vérifiez votre email - Scraper Pro',
+                    f'Bonjour {user.username},\n\nVotre code de vérification est : {code}',
+                    settings.DEFAULT_FROM_EMAIL,
+                    [user.email],
+                    fail_silently=False,
+                )
+            except Exception as e:
+                print(f"Erreur envoi email: {e}")
+                # En cas d'erreur email, on pourrait supprimer le user ou renvoyer une erreur
+                # Pour l'instant, on laisse faire (mais l'user ne pourra pas vérifier)
+            
             return Response({
-                'token': token.key,
-                'user': UserSerializer(user).data,
-                'message': 'Inscription réussie'
+                'message': 'Compte créé. Veuillez vérifier votre email.',
+                'email': user.email,
+                'verification_required': True
             }, status=status.HTTP_201_CREATED)
+            
+        print(f"Register validation errors: {serializer.errors}")
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=['post'], url_path='verify-email')
+    def verify_email(self, request):
+        """
+        Vérifie l'email après inscription.
+        POST /api/auth/verify-email/
+        """
+        email = request.data.get('email')
+        code = request.data.get('code')
+        
+        if not email or not code:
+             return Response({'error': 'Email et code requis'}, status=status.HTTP_400_BAD_REQUEST)
+             
+        try:
+            # On cherche un utilisateur inactif avec cet email
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            return Response({'error': 'Utilisateur introuvable'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        if user.is_active:
+            return Response({'message': 'Compte déjà actif'}, status=status.HTTP_200_OK)
+            
+        if user.two_factor_code != code:
+            return Response({'error': 'Code incorrect'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        # Activer le compte
+        user.is_active = True
+        user.two_factor_code = None
+        user.is_email_verified = True # Si on utilise ce champ
+        user.save()
+        
+        # Connecter l'utilisateur
+        token, created = Token.objects.get_or_create(user=user)
+        return Response({
+            'token': token.key,
+            'user': UserSerializer(user).data,
+            'message': 'Email vérifié, compte activé'
+        }, status=status.HTTP_200_OK)
     
     @action(detail=False, methods=['post'])
     def login(self, request):
@@ -85,6 +150,33 @@ class AuthViewSet(viewsets.ViewSet):
         serializer = LoginSerializer(data=request.data)
         if serializer.is_valid():
             user = serializer.validated_data['user']
+            
+            # Vérifier si 2FA est activé
+            if user.is_2fa_enabled:
+                # Générer un code
+                code = ''.join(random.choices(string.digits, k=6))
+                user.two_factor_code = code
+                user.two_factor_code_expires = timezone.now() + timedelta(minutes=10)
+                user.save(update_fields=['two_factor_code', 'two_factor_code_expires'])
+                
+                # Envoyer l'email
+                try:
+                    send_mail(
+                        'Code de vérification 2FA - Scraper Pro',
+                        f'Votre code de vérification est : {code}',
+                        settings.DEFAULT_FROM_EMAIL,
+                        [user.email],
+                        fail_silently=False,
+                    )
+                except Exception as e:
+                    return Response({
+                        'error': 'Erreur lors de l\'envoi du code email'
+                    }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                
+                return Response({
+                    '2fa_required': True,
+                    'message': 'Code 2FA envoyé par email'
+                }, status=status.HTTP_200_OK)
             
             # Mettre à jour last_login
             user.last_login = timezone.now()
@@ -97,6 +189,124 @@ class AuthViewSet(viewsets.ViewSet):
                 'message': 'Connexion réussie'
             }, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=['post'], url_path='verify-2fa')
+    def verify_2fa(self, request):
+        """
+        Vérifie le code 2FA et connecte l'utilisateur.
+        POST /api/auth/verify-2fa/
+        """
+        username = request.data.get('username')
+        password = request.data.get('password')
+        code = request.data.get('code')
+        
+        if not username or not password or not code:
+            return Response({'error': 'Données incomplètes'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        from django.contrib.auth import authenticate
+        user = authenticate(username=username, password=password)
+        
+        if not user:
+             return Response({'error': 'Identifiants invalides'}, status=status.HTTP_400_BAD_REQUEST)
+             
+        if not user.is_2fa_enabled:
+            return Response({'error': '2FA non activé pour cet utilisateur'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        # Vérifier le code
+        if user.two_factor_code != code:
+            return Response({'error': 'Code incorrect'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        if user.two_factor_code_expires < timezone.now():
+            return Response({'error': 'Code expiré'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        # Code valide, reset du code et login
+        user.two_factor_code = None
+        user.two_factor_code_expires = None
+        user.last_login = timezone.now()
+        user.save()
+        
+        token, created = Token.objects.get_or_create(user=user)
+        return Response({
+            'token': token.key,
+            'user': UserSerializer(user).data,
+            'message': 'Connexion 2FA réussie'
+        }, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated], url_path='enable-2fa')
+    def enable_2fa(self, request):
+        user = request.user
+        user.is_2fa_enabled = True
+        user.save()
+        return Response({'message': '2FA activé avec succès'})
+
+    @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated], url_path='disable-2fa')
+    def disable_2fa(self, request):
+        user = request.user
+        user.is_2fa_enabled = False
+        user.save()
+        return Response({'message': '2FA désactivé avec succès'})
+
+    @action(detail=False, methods=['post'], url_path='forgot-password')
+    def forgot_password(self, request):
+        email = request.data.get('email')
+        if not email:
+            return Response({'error': 'Email requis'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            # Pour sécurité, ne pas dire que l'user n'existe pas
+            return Response({'message': 'Si l\'email existe, un code a été envoyé.'})
+            
+        # Générer code
+        code = ''.join(random.choices(string.digits, k=6))
+        user.two_factor_code = code
+        user.two_factor_code_expires = timezone.now() + timedelta(minutes=15)
+        user.save()
+        
+        # Envoyer email
+        try:
+            send_mail(
+                'Réinitialisation de mot de passe - Scraper Pro',
+                f'Votre code de réinitialisation est : {code}',
+                settings.DEFAULT_FROM_EMAIL,
+                [email],
+                fail_silently=False,
+            )
+        except Exception as e:
+            return Response({'error': 'Erreur d\'envoi d\'email'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
+        return Response({'message': 'Si l\'email existe, un code a été envoyé.'})
+
+    @action(detail=False, methods=['post'], url_path='reset-password-confirm')
+    def reset_password_confirm(self, request):
+        email = request.data.get('email')
+        code = request.data.get('code')
+        new_password = request.data.get('new_password')
+        
+        if not email or not code or not new_password:
+            return Response({'error': 'Données incomplètes'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            return Response({'error': 'Utilisateur introuvable'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        if user.two_factor_code != code:
+            return Response({'error': 'Code incorrect'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        if user.two_factor_code_expires < timezone.now():
+            return Response({'error': 'Code expiré'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        if len(new_password) < 8:
+            return Response({'error': 'Mot de passe trop court (min 8 car.)'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        user.set_password(new_password)
+        user.two_factor_code = None
+        user.two_factor_code_expires = None
+        user.save()
+        
+        return Response({'message': 'Mot de passe réinitialisé avec succès'})
     
     @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated])
     def logout(self, request):

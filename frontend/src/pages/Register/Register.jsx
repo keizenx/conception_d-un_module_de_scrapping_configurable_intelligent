@@ -8,17 +8,19 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import '../../assets/css/register.css';
 
-const Register = () => {
+  const Register = () => {
   const navigate = useNavigate();
-  const { register } = useAuth();
+  const { register, verifyEmail } = useAuth();
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     password: '',
-    confirmPassword: ''
+    confirmPassword: '',
+    code: ''
   });
   const [errors, setErrors] = useState({});
   const [isLoading, setIsLoading] = useState(false);
+  const [showVerification, setShowVerification] = useState(false);
 
   const handleChange = (e) => {
     setFormData({
@@ -69,20 +71,41 @@ const Register = () => {
     e.preventDefault();
     setErrors({});
 
-    if (!validateForm()) {
-      return;
-    }
+    if (!showVerification) {
+        if (!validateForm()) {
+          return;
+        }
 
-    setIsLoading(true);
-    
-    const result = await register(formData.name, formData.email, formData.password);
-    
-    setIsLoading(false);
+        setIsLoading(true);
+        
+        const result = await register(formData.name, formData.email, formData.password);
+        
+        setIsLoading(false);
 
-    if (result.success) {
-      navigate('/dashboard');
+        if (result.success) {
+          if (result.verificationRequired) {
+              setShowVerification(true);
+          } else {
+              navigate('/dashboard');
+          }
+        } else {
+          setErrors({ submit: result.error || 'Erreur lors de l\'inscription' });
+        }
     } else {
-      setErrors({ submit: result.error || 'Erreur lors de l\'inscription' });
+        if (!formData.code) {
+            setErrors({ submit: 'Veuillez entrer le code de vérification' });
+            return;
+        }
+
+        setIsLoading(true);
+        const result = await verifyEmail(formData.email, formData.code);
+        setIsLoading(false);
+
+        if (result.success) {
+            navigate('/dashboard');
+        } else {
+            setErrors({ submit: result.error || 'Code incorrect' });
+        }
     }
   };
 
@@ -107,8 +130,8 @@ const Register = () => {
             <div className="icon-wrapper">
               <span className="register-icon">★</span>
             </div>
-            <h1>Créer un compte</h1>
-            <p className="subtitle">Commencez à scraper en quelques secondes</p>
+            <h1>{showVerification ? 'Vérifiez votre email' : 'Créer un compte'}</h1>
+            <p className="subtitle">{showVerification ? 'Un code a été envoyé à ' + formData.email : 'Commencez à scraper en quelques secondes'}</p>
           </div>
 
           <form onSubmit={handleSubmit} className="register-form">
@@ -119,81 +142,104 @@ const Register = () => {
               </div>
             )}
 
-            <div className="form-group">
-              <label htmlFor="name">
-                <span className="label-icon">👤</span>
-                Nom complet
-              </label>
-              <input
-                type="text"
-                id="name"
-                name="name"
-                value={formData.name}
-                onChange={handleChange}
-                placeholder="Jean Dupont"
-                disabled={isLoading}
-                autoComplete="name"
-                className={errors.name ? 'error' : ''}
-              />
-              {errors.name && <span className="field-error">{errors.name}</span>}
-            </div>
+            {!showVerification ? (
+                <>
+                <div className="form-group">
+                <label htmlFor="name">
+                    <span className="label-icon">👤</span>
+                    Nom complet
+                </label>
+                <input
+                    type="text"
+                    id="name"
+                    name="name"
+                    value={formData.name}
+                    onChange={handleChange}
+                    placeholder="Jean Dupont"
+                    disabled={isLoading}
+                    autoComplete="name"
+                    className={errors.name ? 'error' : ''}
+                />
+                {errors.name && <span className="field-error">{errors.name}</span>}
+                </div>
 
-            <div className="form-group">
-              <label htmlFor="email">
-                <span className="label-icon">✉</span>
-                Email
-              </label>
-              <input
-                type="email"
-                id="email"
-                name="email"
-                value={formData.email}
-                onChange={handleChange}
-                placeholder="votre@email.com"
-                disabled={isLoading}
-                autoComplete="email"
-                className={errors.email ? 'error' : ''}
-              />
-              {errors.email && <span className="field-error">{errors.email}</span>}
-            </div>
+                <div className="form-group">
+                <label htmlFor="email">
+                    <span className="label-icon">✉</span>
+                    Email
+                </label>
+                <input
+                    type="email"
+                    id="email"
+                    name="email"
+                    value={formData.email}
+                    onChange={handleChange}
+                    placeholder="votre@email.com"
+                    disabled={isLoading}
+                    autoComplete="email"
+                    className={errors.email ? 'error' : ''}
+                />
+                {errors.email && <span className="field-error">{errors.email}</span>}
+                </div>
 
-            <div className="form-group">
-              <label htmlFor="password">
-                <span className="label-icon">🔒</span>
-                Mot de passe
-              </label>
-              <input
-                type="password"
-                id="password"
-                name="password"
-                value={formData.password}
-                onChange={handleChange}
-                placeholder="••••••••"
-                disabled={isLoading}
-                autoComplete="new-password"
-                className={errors.password ? 'error' : ''}
-              />
-              {errors.password && <span className="field-error">{errors.password}</span>}
-            </div>
+                <div className="form-group">
+                <label htmlFor="password">
+                    <span className="label-icon">🔒</span>
+                    Mot de passe
+                </label>
+                <input
+                    type="password"
+                    id="password"
+                    name="password"
+                    value={formData.password}
+                    onChange={handleChange}
+                    placeholder="••••••••"
+                    disabled={isLoading}
+                    autoComplete="new-password"
+                    className={errors.password ? 'error' : ''}
+                />
+                {errors.password && <span className="field-error">{errors.password}</span>}
+                </div>
 
-            <div className="form-group">
-              <label htmlFor="confirmPassword">
-                <span className="label-icon">🔒</span>
-                Confirmer le mot de passe
-              </label>
-              <input
-                type="password"
-                id="confirmPassword"
-                name="confirmPassword"
-                value={formData.confirmPassword}
-                onChange={handleChange}
-                placeholder="••••••••"
-                disabled={isLoading}
-                autoComplete="new-password"
-                className={errors.confirmPassword ? 'error' : ''}
-              />
-              {errors.confirmPassword && <span className="field-error">{errors.confirmPassword}</span>}
-            </div>
+                <div className="form-group">
+                <label htmlFor="confirmPassword">
+                    <span className="label-icon">🔒</span>
+                    Confirmer le mot de passe
+                </label>
+                <input
+                    type="password"
+                    id="confirmPassword"
+                    name="confirmPassword"
+                    value={formData.confirmPassword}
+                    onChange={handleChange}
+                    placeholder="••••••••"
+                    disabled={isLoading}
+                    autoComplete="new-password"
+                    className={errors.confirmPassword ? 'error' : ''}
+                />
+                {errors.confirmPassword && <span className="field-error">{errors.confirmPassword}</span>}
+                </div>
+                </>
+            ) : (
+                <div className="form-group">
+                  <label htmlFor="code">
+                    <span className="label-icon">🔑</span>
+                    Code de vérification
+                  </label>
+                  <input
+                    type="text"
+                    id="code"
+                    name="code"
+                    value={formData.code}
+                    onChange={handleChange}
+                    placeholder="123456"
+                    disabled={isLoading}
+                    autoComplete="one-time-code"
+                    maxLength="6"
+                    style={{ letterSpacing: '0.5em', textAlign: 'center', fontSize: '1.2em' }}
+                  />
+                </div>
+            )}
 
             <button 
               type="submit" 
@@ -203,11 +249,11 @@ const Register = () => {
               {isLoading ? (
                 <>
                   <span className="spinner"></span>
-                  Création du compte...
+                  {showVerification ? 'Vérification...' : 'Création du compte...'}
                 </>
               ) : (
                 <>
-                  <span>Créer mon compte</span>
+                  <span>{showVerification ? 'Vérifier' : 'Créer mon compte'}</span>
                   <span className="btn-icon">→</span>
                 </>
               )}

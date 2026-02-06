@@ -15,16 +15,25 @@ class UserSerializer(serializers.ModelSerializer):
     Utilisé pour l'affichage des informations utilisateur.
     """
     name = serializers.SerializerMethodField()
+    avatar_url = serializers.SerializerMethodField()
     
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'name', 'phone', 'company', 'created_at']
+        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'name', 'phone', 'company', 'created_at', 'is_2fa_enabled', 'avatar_url']
         read_only_fields = ['id', 'created_at']
     
     def get_name(self, obj):
         """Retourne le nom complet ou le username si vide."""
         full_name = f"{obj.first_name} {obj.last_name}".strip()
         return full_name if full_name else obj.username
+
+    def get_avatar_url(self, obj):
+        if obj.avatar:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.avatar.url)
+            return obj.avatar.url
+        return None
 
 
 class RegisterSerializer(serializers.ModelSerializer):
@@ -40,9 +49,14 @@ class RegisterSerializer(serializers.ModelSerializer):
         fields = ['username', 'email', 'password', 'password_confirm', 'first_name', 'last_name', 'phone', 'company']
     
     def validate(self, attrs):
-        """Vérifie que les deux mots de passe correspondent."""
+        """Vérifie que les deux mots de passe correspondent et l'unicité de l'email."""
         if attrs['password'] != attrs['password_confirm']:
             raise serializers.ValidationError({"password": "Les mots de passe ne correspondent pas."})
+        
+        email = attrs.get('email')
+        if email and User.objects.filter(email=email).exists():
+            raise serializers.ValidationError({"email": ["Un utilisateur avec cet email existe déjà."]})
+            
         return attrs
     
     def create(self, validated_data):

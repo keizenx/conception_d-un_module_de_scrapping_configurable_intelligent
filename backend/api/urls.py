@@ -26,6 +26,7 @@ router.register(r'reports', ReportsViewSet, basename='reports')
 urlpatterns = [
     # Routes d'authentification
     path('auth/register/', AuthViewSet.as_view({'post': 'register'}), name='auth-register'),
+    path('auth/verify-email/', AuthViewSet.as_view({'post': 'verify_email'}), name='auth-verify-email'),
     path('auth/login/', AuthViewSet.as_view({'post': 'login'}), name='auth-login'),
     path('auth/logout/', AuthViewSet.as_view({'post': 'logout'}), name='auth-logout'),
     path('auth/me/', AuthViewSet.as_view({'get': 'me'}), name='auth-me'),
@@ -34,6 +35,11 @@ urlpatterns = [
     path('auth/delete-account/', AuthViewSet.as_view({'delete': 'delete_account'}), name='auth-delete-account'),
     path('auth/upload-avatar/', AuthViewSet.as_view({'post': 'upload_avatar'}), name='auth-upload-avatar'),
     path('auth/delete-avatar/', AuthViewSet.as_view({'delete': 'delete_avatar'}), name='auth-delete-avatar'),
+    path('auth/verify-2fa/', AuthViewSet.as_view({'post': 'verify_2fa'}), name='auth-verify-2fa'),
+    path('auth/enable-2fa/', AuthViewSet.as_view({'post': 'enable_2fa'}), name='auth-enable-2fa'),
+    path('auth/disable-2fa/', AuthViewSet.as_view({'post': 'disable_2fa'}), name='auth-disable-2fa'),
+    path('auth/forgot-password/', AuthViewSet.as_view({'post': 'forgot_password'}), name='auth-forgot-password'),
+    path('auth/reset-password-confirm/', AuthViewSet.as_view({'post': 'reset_password_confirm'}), name='auth-reset-password-confirm'),
     
     # Routes du dashboard
     path('dashboard/stats/', DashboardViewSet.as_view({'get': 'stats'}), name='dashboard-stats'),

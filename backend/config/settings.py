@@ -3,8 +3,13 @@
 # Configuration complète avec Django REST Framework et CORS
 # RELEVANT FILES: api/models.py, api/views.py, config/urls.py, requirements.txt
 
+import os
 from pathlib import Path
 from datetime import timedelta
+from dotenv import load_dotenv
+
+# Charger les variables d'environnement
+load_dotenv()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -178,3 +183,12 @@ AUTH_USER_MODEL = 'api.User'
 # Augmenter la limite de champs POST pour les données volumineuses du scraping
 DATA_UPLOAD_MAX_NUMBER_FIELDS = 10000
 DATA_UPLOAD_MAX_MEMORY_SIZE = 10485760  # 10 MB
+
+# Email Configuration
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = os.getenv('EMAIL_HOST', 'smtp.gmail.com')
+EMAIL_PORT = int(os.getenv('EMAIL_PORT', 587))
+EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'True') == 'True'
+EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER')
+EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
+DEFAULT_FROM_EMAIL = EMAIL_HOST_USER

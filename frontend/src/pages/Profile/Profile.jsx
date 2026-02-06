@@ -20,6 +20,10 @@ const Profile = () => {
     const [isSaving, setIsSaving] = useState(false);
     const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
     
+    // 2FA
+    const [is2FAEnabled, setIs2FAEnabled] = useState(false);
+    const [isToggling2FA, setIsToggling2FA] = useState(false);
+
     // Avatar
     const [avatarUrl, setAvatarUrl] = useState(null);
     
@@ -71,6 +75,9 @@ const Profile = () => {
             // Avatar
             setAvatarUrl(profile.avatar_url || null);
             
+            // 2FA
+            setIs2FAEnabled(profile.is_2fa_enabled || false);
+
             setUserStats({
                 totalSessions: profile.total_sessions || 0,
                 dataExtracted: profile.data_extracted || 0,
@@ -223,6 +230,28 @@ const Profile = () => {
             setPasswordMessage({ type: 'error', text: error.message || 'Mot de passe actuel incorrect' });
         } finally {
             setIsSaving(false);
+        }
+    };
+
+    const handleToggle2FA = async () => {
+        setIsToggling2FA(true);
+        setPasswordMessage({ type: '', text: '' });
+        
+        try {
+            if (is2FAEnabled) {
+                await api.disable2FA();
+                setIs2FAEnabled(false);
+                setPasswordMessage({ type: 'success', text: 'Authentification à deux facteurs désactivée' });
+            } else {
+                await api.enable2FA();
+                setIs2FAEnabled(true);
+                setPasswordMessage({ type: 'success', text: 'Authentification à deux facteurs activée' });
+            }
+        } catch (error) {
+            setPasswordMessage({ type: 'error', text: error.message || 'Erreur lors du changement 2FA' });
+        } finally {
+            setIsToggling2FA(false);
+            setTimeout(() => setPasswordMessage({ type: '', text: '' }), 3000);
         }
     };
 
@@ -537,6 +566,29 @@ const Profile = () => {
                         
                         {!isChangingPassword && (
                             <div className="card-body">
+                                <div className="security-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 0', borderBottom: '1px solid #f1f5f9' }}>
+                                    <div>
+                                        <h4 style={{ margin: '0 0 0.25rem 0', fontSize: '1rem' }}>Authentification à deux facteurs (2FA)</h4>
+                                        <p style={{ margin: 0, fontSize: '0.875rem', color: '#64748b' }}>
+                                            Ajoute une couche de sécurité supplémentaire en demandant un code par email lors de la connexion.
+                                        </p>
+                                    </div>
+                                    <div className="toggle-switch">
+                                        <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+                                            <input 
+                                                type="checkbox" 
+                                                checked={is2FAEnabled} 
+                                                onChange={handleToggle2FA}
+                                                disabled={isToggling2FA}
+                                                style={{ marginRight: '0.5rem' }}
+                                            />
+                                            <span style={{ fontSize: '0.875rem', fontWeight: 500, color: is2FAEnabled ? '#10b981' : '#64748b' }}>
+                                                {is2FAEnabled ? 'Activé' : 'Désactivé'}
+                                            </span>
+                                        </label>
+                                    </div>
+                                </div>
+
                                 <p className="security-info">
                                     <span className="material-icons">info</span>
                                     Dernière modification: {userStats.lastLogin || 'Jamais'}

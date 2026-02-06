@@ -46,6 +46,11 @@ export const AuthProvider = ({ children }) => {
     try {
       const data = await api.login(email, password);
       
+      // Si 2FA requis, on renvoie l'info sans connecter l'user
+      if (data['2fa_required']) {
+        return { success: true, requires2FA: true, message: data.message };
+      }
+
       const userData = {
         id: data.user.id,
         email: data.user.email,
@@ -61,10 +66,52 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const verify2FA = async (email, password, code) => {
+    try {
+      const data = await api.verify2FA(email, password, code);
+      
+      const userData = {
+        id: data.user.id,
+        email: data.user.email,
+        name: data.user.name,
+        role: data.user.role || 'user',
+        avatar: data.user.avatar_url || null
+      };
+      setUser(userData);
+      localStorage.setItem('scraper_pro_user', JSON.stringify(userData));
+      return { success: true, user: userData };
+    } catch (error) {
+      return { success: false, error: error.message || 'Code incorrect' };
+    }
+  };
+
+  const verifyEmail = async (email, code) => {
+    try {
+      const data = await api.verifyEmail(email, code);
+      
+      const userData = {
+        id: data.user.id,
+        email: data.user.email,
+        name: data.user.name,
+        role: data.user.role || 'user',
+        avatar: data.user.avatar_url || null
+      };
+      setUser(userData);
+      localStorage.setItem('scraper_pro_user', JSON.stringify(userData));
+      return { success: true, user: userData };
+    } catch (error) {
+      return { success: false, error: error.message || 'Code incorrect' };
+    }
+  };
+
   const register = async (name, email, password) => {
     try {
       const data = await api.register(name, email, password);
       
+      if (data.verification_required) {
+        return { success: true, verificationRequired: true, message: data.message };
+      }
+
       const userData = {
         id: data.user.id,
         email: data.user.email,
@@ -96,6 +143,8 @@ export const AuthProvider = ({ children }) => {
     isLoading,
     isAuthenticated: !!user,
     login,
+    verify2FA,
+    verifyEmail,
     register,
     logout,
     updateUser

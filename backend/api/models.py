@@ -18,6 +18,16 @@ class User(AbstractUser):
     company = models.CharField(max_length=200, blank=True, null=True)
     bio = models.TextField(blank=True, null=True)
     avatar = models.ImageField(upload_to='avatars/', blank=True, null=True)
+    
+    # Two-Factor Authentication
+    is_2fa_enabled = models.BooleanField(default=False)
+    two_factor_code = models.CharField(max_length=6, blank=True, null=True)
+    two_factor_code_expires = models.DateTimeField(blank=True, null=True)
+    
+    # Email Verification
+    is_email_verified = models.BooleanField(default=False)
+    email_verification_token = models.CharField(max_length=64, blank=True, null=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
