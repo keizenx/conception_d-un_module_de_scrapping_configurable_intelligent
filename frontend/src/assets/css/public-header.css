@@ -1,0 +1,62 @@
+.public-header {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem 2rem;
+    z-index: 1000;
+}
+
+.public-header .logo .logo-text {
+    color: var(--text-primary);
+    font-size: 1.2rem;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.public-header .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+}
+
+.public-header .public-nav {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+}
+
+.public-header .nav-link {
+    color: var(--text-secondary);
+    text-decoration: none;
+    font-weight: 500;
+    transition: color 0.2s ease;
+}
+
+.public-header .nav-link:hover {
+    color: var(--text-primary);
+}
+
+.public-header .btn-register {
+    background-color: var(--primary);
+    color: #fff;
+    padding: 0.5rem 1rem;
+    border-radius: 5px;
+    font-weight: 600;
+}
+
+.public-header .btn-register:hover {
+    background-color: var(--primary-dark);
+    color: #fff;
+}
+
+.public-header .btn-theme-toggle {
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    cursor: pointer;
+    font-size: 1.5rem;
+}

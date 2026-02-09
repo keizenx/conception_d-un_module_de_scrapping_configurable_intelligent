@@ -6,11 +6,13 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { useTheme } from '../../contexts/ThemeContext';
 import '../../assets/css/login.css';
 
   const Login = () => {
   const navigate = useNavigate();
   const { login, verify2FA } = useAuth();
+   const { theme, toggleTheme } = useTheme(); 
   const [formData, setFormData] = useState({
     email: '',
     password: '',

@@ -15,6 +15,17 @@
   --text-primary: #FFFFFF;
   --text-secondary: #A0A0B0;
   --text-muted: #606070;
+  --border: rgba(255, 255, 255, 0.1);
+}
+
+.light {
+  --bg-dark: #F5F5F7;
+  --bg-darker: #FFFFFF;
+  --bg-card: #FFFFFF;
+  --text-primary: #1D1D1F;
+  --text-secondary: #515154;
+  --text-muted: #86868B;
+  --border: rgba(0, 0, 0, 0.1);
 }
 
 .register-page {
@@ -37,6 +48,7 @@
   height: 100%;
   z-index: 0;
   overflow: hidden;
+  background-color: var(--bg-dark);
 }
 
 .grid-overlay {
@@ -46,9 +58,14 @@
   background-image: 
     linear-gradient(rgba(0, 229, 255, 0.05) 1px, transparent 1px),
     linear-gradient(90deg, rgba(0, 229, 255, 0.05) 1px, transparent 1px);
-  background-size: 50px 50px;
   opacity: 0.3;
   animation: gridMove 20s linear infinite;
+}
+
+.light .grid-overlay {
+    background-image: 
+    linear-gradient(rgba(0, 0, 0, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.05) 1px, transparent 1px);
 }
 
 @keyframes gridMove {
@@ -62,6 +79,10 @@
   filter: blur(80px);
   opacity: 0.4;
   animation: float 8s ease-in-out infinite;
+}
+
+.light .gradient-orb {
+    opacity: 0.2;
 }
 
 .orb-1 {
@@ -86,46 +107,6 @@
   50% { transform: translate(30px, 30px); }
 }
 
-/* Navigation */
-.register-nav {
-  position: relative;
-  z-index: 10;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 1.5rem 5%;
-  background: rgba(10, 10, 15, 0.8);
-  backdrop-filter: blur(10px);
-  border-bottom: 1px solid rgba(0, 229, 255, 0.1);
-}
-
-.logo {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  font-family: 'Bebas Neue', sans-serif;
-  font-size: 1.8rem;
-  letter-spacing: 2px;
-  color: var(--primary);
-  text-decoration: none;
-  transition: all 0.3s ease;
-}
-
-.logo:hover {
-  transform: translateY(-2px);
-  filter: brightness(1.2);
-}
-
-.logo-icon {
-  font-size: 1.5rem;
-  animation: pulse 2s ease-in-out infinite;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.6; }
-}
-
 /* Register container */
 .register-container {
   position: relative;
@@ -138,17 +119,22 @@
 }
 
 .register-card {
-  background: rgba(20, 20, 25, 0.85);
+  background: var(--bg-card);
   backdrop-filter: blur(20px);
-  border: 1px solid rgba(0, 229, 255, 0.15);
+  border: 1px solid var(--border);
   border-radius: 20px;
   padding: 3rem;
   width: 100%;
   max-width: 520px;
   box-shadow: 
-    0 20px 60px rgba(0, 0, 0, 0.4),
-    0 0 0 1px rgba(0, 229, 255, 0.1) inset;
+    0 20px 60px rgba(0, 0, 0, 0.1);
   animation: slideUp 0.5s ease;
+}
+
+.light .register-card {
+    box-shadow: 
+    0 20px 60px rgba(0, 0, 0, 0.1),
+    0 0 0 1px var(--border) inset;
 }
 
 @keyframes slideUp {
@@ -189,10 +175,7 @@
   font-size: 2rem;
   font-weight: 700;
   margin: 0 0 0.5rem 0;
-  background: linear-gradient(135deg, var(--text-primary) 0%, var(--text-secondary) 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--text-primary);
 }
 
 .subtitle {
@@ -230,8 +213,8 @@
 .form-group input {
   width: 100%;
   padding: 0.875rem 1.125rem;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--bg-darker);
+  border: 1px solid var(--border);
   border-radius: 10px;
   color: var(--text-primary);
   font-size: 1rem;
@@ -241,9 +224,8 @@
 
 .form-group input:focus {
   outline: none;
-  background: rgba(255, 255, 255, 0.08);
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(0, 229, 255, 0.1);
+  box-shadow: 0 0 0 3px rgba(0, 229, 255, 0.2);
 }
 
 .form-group input:disabled {
@@ -361,7 +343,7 @@
 .register-footer {
   margin-top: 2rem;
   padding-top: 2rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid var(--border);
   text-align: center;
 }
 

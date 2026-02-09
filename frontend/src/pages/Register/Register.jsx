@@ -8,7 +8,9 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import '../../assets/css/register.css';
 
-  const Register = () => {
+  import PublicHeader from '../../components/Public/PublicHeader';
+
+const Register = () => {
   const navigate = useNavigate();
   const { register, verifyEmail } = useAuth();
   const [formData, setFormData] = useState({
@@ -111,18 +113,12 @@ import '../../assets/css/register.css';
 
   return (
     <div className="register-page">
+      <PublicHeader />
       <div className="register-background">
         <div className="grid-overlay"></div>
         <div className="gradient-orb orb-1"></div>
         <div className="gradient-orb orb-2"></div>
       </div>
-
-      <nav className="register-nav">
-        <Link to="/" className="logo">
-          <span className="logo-icon">◆</span>
-          <span>SCRAPER PRO</span>
-        </Link>
-      </nav>
 
       <div className="register-container">
         <div className="register-card">

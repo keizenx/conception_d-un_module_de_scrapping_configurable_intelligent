@@ -7,8 +7,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import api from '../../services/api';
 import { useScraping } from '../../contexts/ScrapingContext';
-import '../../assets/css/analysis.css';
-import '../../assets/css/format-modal.css';
+
 
 export default function Analysis() {
   const navigate = useNavigate();
@@ -353,9 +352,7 @@ export default function Analysis() {
         sessionId: result.sessionId,
       });
       
-      // Option: Rediriger vers les résultats immédiatement ou laisser l'utilisateur choisir
-      // navigate(`/results?session=${result.sessionId}`);
-      // Ou rediriger vers le dashboard
+      // Rediriger directement vers le dashboard pour voir la progression
       navigate('/dashboard');
       
     } catch (error) {
@@ -376,154 +373,108 @@ export default function Analysis() {
   };
   
   return (
-    <div className="app-container">
-      {/* Sidebar - SEULEMENT LE LOGO */}
-      <aside className="sidebar">
-        <div className="logo" onClick={() => navigate('/dashboard')} style={{ cursor: 'pointer' }}>
-          <div className="logo-icon">⚡</div>
-          SCRAPER PRO
-        </div>
-      </aside>
-      
-      {/* Main Content */}
-      <main className="main-content">
-        {/* Header */}
-        <header className="page-header">
-          <h1 className="page-title">Nouvelle Analyse</h1>
-          <p className="page-subtitle">
-            Laissez-nous analyser votre site web et nous vous montrerons ce que nous pouvons extraire
-          </p>
-        </header>
-        
-        {/* Step Indicator */}
-        <div className="step-indicator">
-          <div className="step-progress" style={{ width: getStepProgress() }}></div>
-          
-          <div className={`step ${currentStep === 1 ? 'active' : ''} ${currentStep > 1 ? 'completed' : ''}`}>
-            <div className="step-number">1</div>
+    <div className="analysis-page-container">
+      {/* Colonne de gauche pour les étapes (interne) */}
+      <div className="analysis-steps-sidebar">
+        <h2 className="analysis-internal-title">NOUVELLE ANALYSE</h2>
+        <div className="step-indicator-vertical">
+          <div className={`step ${currentStep >= 1 ? 'active' : ''} ${currentStep > 1 ? 'completed' : ''}`}>
+            <div className="step-number">{currentStep > 1 ? '✓' : '1'}</div>
             <div className="step-label">URL du site</div>
           </div>
-          
-          <div className={`step ${currentStep === 2 ? 'active' : ''} ${currentStep > 2 ? 'completed' : ''}`}>
-            <div className="step-number">2</div>
+          <div className={`step ${currentStep >= 2 ? 'active' : ''} ${currentStep > 2 ? 'completed' : ''}`}>
+            <div className="step-number">{currentStep > 2 ? '✓' : '2'}</div>
             <div className="step-label">Analyse auto</div>
           </div>
-          
-          <div className={`step ${currentStep === 3 ? 'active' : ''} ${currentStep > 3 ? 'completed' : ''}`}>
-            <div className="step-number">3</div>
+          <div className={`step ${currentStep >= 3 ? 'active' : ''} ${currentStep > 3 ? 'completed' : ''}`}>
+            <div className="step-number">{currentStep > 3 ? '✓' : '3'}</div>
             <div className="step-label">Sélection</div>
           </div>
-          
-          <div className={`step ${currentStep === 4 ? 'active' : ''}`}>
+          <div className={`step ${currentStep >= 4 ? 'active' : ''}`}>
             <div className="step-number">4</div>
             <div className="step-label">Configuration</div>
           </div>
         </div>
+      </div>
+
+      {/* Colonne de droite pour le contenu principal (interne) */}
+      <div className="analysis-content-area">
+        {/* Le Header global gère déjà le titre principal, on l'omet ici ou on garde juste le sous-titre si besoin */}
         
         {/* Step 1: URL Input */}
         {!showResults && (
-          <div className="card">
+          <div className="card analysis-card">
             <div className="card-header">
-              <h2 className="card-title">
-                <span>🌐</span>
-                Quel site souhaitez-vous scraper ?
-              </h2>
-              <p className="card-description">
-                Entrez simplement l'URL du site web que vous voulez analyser. Notre système va automatiquement détecter les informations disponibles.
-              </p>
+              <div className="card-header-content">
+                <span className="card-icon material-icons">public</span>
+                <div className="card-header-text">
+                  <h2 className="card-title">Quel site souhaitez-vous scraper ?</h2>
+                  <p className="card-description">
+                    Entrez simplement l'URL du site web que vous voulez analyser. Notre système va automatiquement détecter les informations disponibles.
+                  </p>
+                </div>
+              </div>
             </div>
             
-            <div className="url-input-section">
-              <label className="input-label">URL du site web</label>
-              <div className="url-input-wrapper">
-                <span className="url-icon">🔗</span>
-                <input
-                  type="text"
-                  className="url-input"
-                  value={url}
-                  onChange={(e) => setUrl(e.target.value)}
-                  placeholder="https://"
-                  onKeyPress={(e) => e.key === 'Enter' && handleAnalyze()}
-                />
-              </div>
-              
-              {/* Subdomain Option */}
-              <div className="subdomain-option">
-                <div className="option-info">
-                  <div className="option-title">Inclure les sous-domaines</div>
-                  <div className="option-description">
-                    Scraper également les sous-domaines du site principal
-                  </div>
+            <div className="card-body">
+              <div className="form-group">
+                <label htmlFor="urlInput" className="form-label">URL du site web</label>
+                <div className="input-with-icon">
+                  <span className="material-icons input-icon">link</span>
+                  <input
+                    type="text"
+                    id="urlInput"
+                    className="form-control"
+                    value={url}
+                    onChange={(e) => setUrl(e.target.value)}
+                    placeholder="https://exemple.com"
+                    onKeyPress={(e) => e.key === 'Enter' && handleAnalyze()}
+                  />
                 </div>
-                <input
-                  type="checkbox"
-                  id="includeSubdomains"
-                  checked={includeSubdomains}
-                  onChange={(e) => setIncludeSubdomains(e.target.checked)}
-                />
-                <label htmlFor="includeSubdomains" className="toggle-switch"></label>
               </div>
               
-              <button
-                className="btn-analyze"
-                onClick={handleAnalyze}
-                disabled={isAnalyzing}
-              >
-                <span className="material-icons">{isAnalyzing ? 'hourglass_empty' : 'rocket_launch'}</span>
-                {isAnalyzing ? 'Analyse en cours...' : 'Analyser le site'}
-              </button>
+              <div className="form-group-inline">
+                <div className="checkbox-group">
+                  <input
+                    type="checkbox"
+                    id="includeSubdomains"
+                    checked={includeSubdomains}
+                    onChange={(e) => setIncludeSubdomains(e.target.checked)}
+                  />
+                  <label htmlFor="includeSubdomains" className="checkbox-label">
+                    <span className="checkbox-title">Inclure les sous-domaines</span>
+                    <span className="checkbox-description">Scraper également les sous-domaines du site principal</span>
+                  </label>
+                </div>
+              </div>
+              
+              <div className="form-actions">
+                <button
+                  className="btn btn-primary"
+                  onClick={handleAnalyze}
+                  disabled={isAnalyzing}
+                >
+                  <span className="material-icons">{isAnalyzing ? 'hourglass_empty' : 'rocket_launch'}</span>
+                  {isAnalyzing ? 'Analyse en cours...' : 'Analyser le site'}
+                </button>
+              </div>
             </div>
             
             {/* Message informatif pendant l'analyse asynchrone */}
             {isAnalyzing && sessionId && (
-              <div className="async-analysis-info" style={{
-                marginTop: '2rem',
-                padding: '1.5rem',
-                background: 'linear-gradient(135deg, rgba(0, 229, 255, 0.1), rgba(123, 97, 255, 0.1))',
-                border: '1px solid rgba(0, 229, 255, 0.3)',
-                borderRadius: '12px',
-                textAlign: 'center'
-              }}>
-                <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>🔍</div>
-                <h3 style={{ color: '#00E5FF', marginBottom: '0.5rem' }}>Analyse en cours...</h3>
-                <p style={{ color: '#A0A0B0', marginBottom: '1.5rem' }}>
+              <div className="async-analysis-info">
+                <div className="spinner"></div>
+                <h3>Analyse en cours...</h3>
+                <p>
                   L'analyse se poursuit en arrière-plan. Vous pouvez naviguer librement, 
                   une notification vous préviendra quand c'est terminé.
                 </p>
-                <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
-                  <button 
-                    className="btn-secondary"
-                    onClick={() => navigate('/dashboard')}
-                    style={{
-                      padding: '0.75rem 1.5rem',
-                      background: 'rgba(0, 229, 255, 0.2)',
-                      border: '1px solid #00E5FF',
-                      borderRadius: '8px',
-                      color: '#00E5FF',
-                      cursor: 'pointer',
-                      fontWeight: '600'
-                    }}
-                  >
-                    Aller au Dashboard
-                  </button>
-                  <button 
-                    className="btn-secondary"
-                    onClick={() => {
-                      setIsAnalyzing(false);
-                      setSessionId(null);
-                    }}
-                    style={{
-                      padding: '0.75rem 1.5rem',
-                      background: 'rgba(160, 160, 176, 0.1)',
-                      border: '1px solid #606070',
-                      borderRadius: '8px',
-                      color: '#A0A0B0',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    Masquer ce message
-                  </button>
-                </div>
+                <button 
+                  className="btn btn-secondary"
+                  onClick={() => navigate('/dashboard')}
+                >
+                  Aller au Dashboard
+                </button>
               </div>
             )}
           </div>
@@ -1106,188 +1057,7 @@ export default function Analysis() {
             </div>
           </div>
         )}
-      </main>
-      
-      {/* Format Configuration Modal */}
-      {showFormatModal && (
-        <div className="modal-overlay" onClick={() => setShowFormatModal(false)}>
-          <div className="modal-content format-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3 className="modal-title">Format</h3>
-              <button className="modal-close" onClick={() => setShowFormatModal(false)}>
-                ✕
-              </button>
-            </div>
-            
-            <div className="modal-body">
-              {/* Format Options */}
-              <div className="format-options-list">
-                {/* Markdown */}
-                <div className="format-option">
-                  <input
-                    type="checkbox"
-                    id="format-markdown"
-                    checked={outputFormats.markdown}
-                    onChange={(e) => setOutputFormats({...outputFormats, markdown: e.target.checked})}
-                  />
-                  <label htmlFor="format-markdown" className="format-label">
-                    <span className="format-icon">📝</span>
-                    <span className="format-name">Markdown</span>
-                  </label>
-                </div>
-                
-                {/* Summary */}
-                <div className="format-option">
-                  <input
-                    type="checkbox"
-                    id="format-summary"
-                    checked={outputFormats.summary}
-                    onChange={(e) => setOutputFormats({...outputFormats, summary: e.target.checked})}
-                  />
-                  <label htmlFor="format-summary" className="format-label">
-                    <span className="format-icon">≡</span>
-                    <span className="format-name">Summary</span>
-                  </label>
-                </div>
-                
-                {/* Links */}
-                <div className="format-option">
-                  <input
-                    type="checkbox"
-                    id="format-links"
-                    checked={outputFormats.links}
-                    onChange={(e) => setOutputFormats({...outputFormats, links: e.target.checked})}
-                  />
-                  <label htmlFor="format-links" className="format-label">
-                    <span className="format-icon">🔗</span>
-                    <span className="format-name">Links</span>
-                  </label>
-                </div>
-                
-                {/* HTML */}
-                <div className="format-option">
-                  <input
-                    type="checkbox"
-                    id="format-html"
-                    checked={outputFormats.html}
-                    onChange={(e) => setOutputFormats({...outputFormats, html: e.target.checked})}
-                  />
-                  <label htmlFor="format-html" className="format-label">
-                    <span className="format-icon">&lt;/&gt;</span>
-                    <span className="format-name">HTML</span>
-                  </label>
-                  {outputFormats.html && (
-                    <div className="format-sub-options">
-                      <button
-                        className={`sub-option-btn ${htmlMode === 'cleaned' ? 'active' : ''}`}
-                        onClick={() => setHtmlMode('cleaned')}
-                      >
-                        Cleaned
-                      </button>
-                      <button
-                        className={`sub-option-btn ${htmlMode === 'raw' ? 'active' : ''}`}
-                        onClick={() => setHtmlMode('raw')}
-                      >
-                        Raw
-                      </button>
-                    </div>
-                  )}
-                </div>
-                
-                {/* Screenshot */}
-                <div className="format-option">
-                  <input
-                    type="checkbox"
-                    id="format-screenshot"
-                    checked={outputFormats.screenshot}
-                    onChange={(e) => setOutputFormats({...outputFormats, screenshot: e.target.checked})}
-                  />
-                  <label htmlFor="format-screenshot" className="format-label">
-                    <span className="format-icon">📸</span>
-                    <span className="format-name">Screenshot</span>
-                  </label>
-                  {outputFormats.screenshot && (
-                    <div className="format-sub-options">
-                      <button
-                        className={`sub-option-btn ${screenshotMode === 'viewport' ? 'active' : ''}`}
-                        onClick={() => setScreenshotMode('viewport')}
-                      >
-                        Viewport
-                      </button>
-                      <button
-                        className={`sub-option-btn ${screenshotMode === 'fullpage' ? 'active' : ''}`}
-                        onClick={() => setScreenshotMode('fullpage')}
-                      >
-                        Full Page
-                      </button>
-                    </div>
-                  )}
-                </div>
-                
-                {/* JSON */}
-                <div className="format-option">
-                  <input
-                    type="checkbox"
-                    id="format-json"
-                    checked={outputFormats.json}
-                    onChange={(e) => setOutputFormats({...outputFormats, json: e.target.checked})}
-                  />
-                  <label htmlFor="format-json" className="format-label">
-                    <span className="format-icon">{'{}'}</span>
-                    <span className="format-name">JSON</span>
-                  </label>
-                  <button className="edit-options-btn">✏️ Edit options</button>
-                </div>
-                
-                {/* Branding */}
-                <div className="format-option">
-                  <input
-                    type="checkbox"
-                    id="format-branding"
-                    checked={outputFormats.branding}
-                    onChange={(e) => setOutputFormats({...outputFormats, branding: e.target.checked})}
-                  />
-                  <label htmlFor="format-branding" className="format-label">
-                    <span className="format-icon">🎨</span>
-                    <span className="format-name">Branding</span>
-                  </label>
-                </div>
-                
-                {/* Images */}
-                <div className="format-option">
-                  <input
-                    type="checkbox"
-                    id="format-images"
-                    checked={outputFormats.images}
-                    onChange={(e) => setOutputFormats({...outputFormats, images: e.target.checked})}
-                  />
-                  <label htmlFor="format-images" className="format-label">
-                    <span className="format-icon">🖼️</span>
-                    <span className="format-name">Images</span>
-                  </label>
-                </div>
-              </div>
-              
-              {/* Format Summary */}
-              <div className="format-summary">
-                <div className="summary-label">Formats sélectionnés:</div>
-                <div className="summary-count">
-                  {Object.values(outputFormats).filter(v => v).length} / {Object.keys(outputFormats).length}
-                </div>
-              </div>
-            </div>
-            
-            <div className="modal-footer">
-              <button className="btn-secondary" onClick={() => setShowFormatModal(false)}>
-                Annuler
-              </button>
-              <button className="btn-primary" onClick={() => setShowFormatModal(false)}>
-                ✓ Confirmer
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      </div>
     </div>
   );
 }

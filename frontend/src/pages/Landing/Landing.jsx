@@ -9,6 +9,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import api from '../../services/api';
 import '../../assets/css/landing.css';
 
+import PublicHeader from '../../components/Public/PublicHeader';
+
 const Landing = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -108,21 +110,7 @@ const Landing = () => {
 
   return (
     <div className="landing-page">
-      {/* Navigation */}
-      <nav>
-        <div className="logo">
-          <div className="logo-icon"><span className="material-icons">flash_on</span></div>
-          SCRAPER PRO
-        </div>
-        <ul>
-          <li><a href="#services">Services</a></li>
-          <li><a href="#features">Fonctionnalités</a></li>
-          <li><a href="#tech">Technologies</a></li>
-          <li><a href="#equipe">Équipe</a></li>
-          <li><a href="#contact">Contact</a></li>
-        </ul>
-        <Link to="/login" className="cta-button">DÉMARRER</Link>
-      </nav>
+      <PublicHeader />
 
       {/* Hero Section */}
       <section className="hero">

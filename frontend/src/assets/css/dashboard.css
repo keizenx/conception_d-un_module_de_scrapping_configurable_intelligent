@@ -7,9 +7,10 @@
     --primary: #FF4D00;
     --primary-dark: #CC3D00;
     --accent: #00E5FF;
-    --success: #00FF88;
-    --warning: #FFB800;
+    --success: #00C853;
+    --warning: #FFAB00;
     --error: #FF3B3B;
+
     --bg-dark: #0A0A0F;
     --bg-darker: #050508;
     --bg-card: #141419;
@@ -20,9 +21,29 @@
     --border: rgba(255, 77, 0, 0.1);
 }
 
+body.light-theme {
+    --primary: #FF4D00;
+    --primary-dark: #CC3D00;
+    --accent: #007BFF;
+    --success: #28A745;
+    --warning: #FFC107;
+    --error: #DC3545;
+
+    --bg-dark: #F4F6F8;
+    --bg-darker: #FFFFFF;
+    --bg-card: #FFFFFF;
+    --bg-hover: #F0F0F0;
+    --text-primary: #212529;
+    --text-secondary: #6C757D;
+    --text-muted: #ADB5BD;
+    --border: #DEE2E6;
+}
+
 .app-container {
     display: flex;
     min-height: 100vh;
+    background-color: var(--bg-dark);
+    color: var(--text-primary);
 }
 
 /* ===== SIDEBAR ===== */
@@ -71,6 +92,807 @@
     transform: rotate(15deg) scale(1.1);
 }
 
+.sidebar-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0 2rem;
+}
+
+.nav-link {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.875rem 1.5rem;
+    border-radius: 10px;
+    color: var(--text-secondary);
+    font-weight: 500;
+    text-decoration: none;
+    transition: all 0.2s ease;
+}
+
+.nav-link:hover {
+    background-color: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.nav-link.active {
+    background: linear-gradient(90deg, rgba(255, 77, 0, 0.2), rgba(255, 77, 0, 0.05));
+    color: var(--primary);
+    font-weight: 600;
+    border-right: 3px solid var(--primary);
+}
+
+.nav-link .material-icons {
+    font-size: 1.3rem;
+}
+
+/* ===== ANALYSIS FORM ===== */
+.analysis-card .card-header {
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.analysis-card .card-header-content {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+}
+
+.analysis-card .card-icon {
+    font-size: 2rem;
+    color: var(--accent);
+}
+
+.analysis-card .card-title {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 600;
+}
+
+.analysis-card .card-description {
+    margin: 0;
+    color: var(--text-secondary);
+}
+
+/* ===== FORMULAIRE ET INPUTS ===== */
+.form-group {
+    margin-bottom: 1.5rem;
+}
+
+.form-label {
+    display: block;
+    font-weight: 500;
+    margin-bottom: 0.75rem;
+    color: var(--text-primary);
+    font-size: 0.95rem;
+}
+
+.input-with-icon {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.input-with-icon .input-icon {
+    position: absolute;
+    left: 1rem;
+    color: var(--text-muted);
+    font-size: 1.2rem;
+    pointer-events: none; /* L'icône ne bloque pas le clic */
+    z-index: 1;
+}
+
+.form-control {
+    width: 100%;
+    padding: 1rem 1rem 1rem 3rem; /* Padding gauche suffisant pour l'icône */
+    background-color: var(--bg-darker);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text-primary);
+    font-size: 1rem;
+    transition: all 0.2s ease;
+}
+
+.form-control:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 4px rgba(255, 77, 0, 0.1);
+    background-color: var(--bg-card);
+}
+
+.form-control::placeholder {
+    color: var(--text-muted);
+    opacity: 0.7;
+}
+
+/* Checkbox Group amélioré */
+.form-group-inline {
+    background-color: var(--bg-darker);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1rem;
+    margin-bottom: 2rem;
+    transition: all 0.2s;
+}
+
+.form-group-inline:hover {
+    border-color: var(--accent);
+    background-color: rgba(0, 229, 255, 0.02);
+}
+
+.checkbox-group {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    width: 100%;
+}
+
+/* Style de la checkbox native */
+.checkbox-group input[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
+    min-width: 22px;
+    height: 22px;
+    background-color: var(--bg-card);
+    border: 2px solid var(--text-muted);
+    border-radius: 6px;
+    cursor: pointer;
+    position: relative;
+    margin-top: 2px; /* Alignement avec le titre */
+    transition: all 0.2s;
+}
+
+.checkbox-group input[type="checkbox"]:checked {
+    background-color: var(--primary);
+    border-color: var(--primary);
+}
+
+.checkbox-group input[type="checkbox"]:checked::after {
+    content: '✓';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: white;
+    font-size: 14px;
+    font-weight: 800;
+}
+
+.checkbox-label {
+    display: flex;
+    flex-direction: column;
+    cursor: pointer;
+    flex: 1;
+}
+
+.checkbox-title {
+    font-weight: 600;
+    color: var(--text-primary);
+    font-size: 1rem;
+    margin-bottom: 0.25rem;
+}
+
+.checkbox-description {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+
+/* Analysis Page Layout */
+.analysis-page-container {
+  display: flex;
+  gap: 2rem;
+  /* On s'adapte à la hauteur disponible moins le header et les paddings */
+  min-height: calc(100vh - 140px); 
+  position: relative;
+}
+
+/* Colonne de gauche (Étapes) */
+.analysis-steps-sidebar {
+  width: 250px;
+  flex-shrink: 0;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 1.5rem;
+  height: fit-content;
+  position: sticky;
+  top: 2rem;
+}
+
+.analysis-internal-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+  letter-spacing: 1px;
+}
+
+/* Colonne de droite (Contenu) */
+.analysis-content-area {
+  flex: 1;
+  min-width: 0; /* Empêche le débordement flex */
+}
+
+/* Masquer le header interne car on a déjà le Header global */
+.analysis-content-area .page-header {
+  display: none;
+}
+
+.step-indicator-vertical {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.step-indicator-vertical .step {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  opacity: 0.6;
+}
+
+.step-indicator-vertical .step.active {
+  opacity: 1;
+  background-color: rgba(255, 77, 0, 0.05);
+}
+
+.step-indicator-vertical .step.completed .step-number {
+  background-color: var(--success);
+  border-color: var(--success);
+  color: white;
+}
+
+.step-indicator-vertical .step-number {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background-color: var(--bg-darker);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.85rem;
+  transition: all 0.3s;
+}
+
+.step-indicator-vertical .step.active .step-number {
+  background-color: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+
+.step-indicator-vertical .step-label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* Analysis Results */
+.analysis-results .card {
+  padding: 0;
+}
+
+.analysis-results .card-header {
+  padding: 2rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.site-info-card {
+  padding: 2rem;
+  background-color: var(--bg-dark);
+}
+
+.site-info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1.5rem;
+}
+
+.info-item .info-label {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.5rem;
+  display: block;
+}
+
+.info-item .info-value {
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.subdomains-section,
+.content-types-section,
+.configuration-section,
+.custom-selectors-section,
+.paths-section {
+  padding: 2rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.section-title {
+  font-size: 1.2rem;
+  font-weight: 600;
+  margin-bottom: 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.scrapable-content-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.5rem;
+}
+
+.scrapable-item {
+  background-color: var(--bg-dark);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.5rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.scrapable-item:hover {
+  transform: translateY(-4px);
+  border-color: var(--primary);
+}
+
+.scrapable-item.selected {
+  border-color: var(--primary);
+  box-shadow: 0 0 15px rgba(255, 77, 0, 0.3);
+}
+
+.scrapable-item-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.scrapable-icon {
+  font-size: 1.5rem;
+}
+
+.scrapable-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0;
+  flex: 1;
+}
+
+.scrapable-item-header input[type="checkbox"] {
+  margin-left: auto;
+}
+
+.scrapable-description {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  margin-bottom: 1rem;
+}
+
+.config-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+  margin-bottom: 2rem;
+}
+
+/* --- CORRECTION DES STYLES ANALYSIS --- */
+
+/* 1. Format Grid (Stockage) */
+.format-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.format-card {
+  flex: 1;
+  min-width: 100px;
+  background-color: var(--bg-darker);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.format-card:hover {
+  border-color: var(--primary);
+  background-color: var(--bg-hover);
+  transform: translateY(-2px);
+}
+
+.format-card.selected {
+  background-color: rgba(255, 77, 0, 0.1);
+  border-color: var(--primary);
+  box-shadow: 0 0 0 1px var(--primary);
+}
+
+.format-icon {
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+}
+
+.format-name {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* 2. Custom Selectors (Sélecteurs CSS) */
+.selector-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.selector-field {
+  display: grid;
+  grid-template-columns: 1fr 2fr auto;
+  gap: 1rem;
+  align-items: center;
+}
+
+.field-input {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background-color: var(--bg-darker);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 0.95rem;
+}
+
+.field-input:focus {
+  border-color: var(--primary);
+  outline: none;
+}
+
+.btn-remove {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(255, 59, 59, 0.1);
+  color: var(--error);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-remove:hover {
+  background-color: var(--error);
+  color: white;
+}
+
+.btn-add-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.25rem;
+  background-color: var(--bg-darker);
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  color: var(--accent);
+  cursor: pointer;
+  transition: all 0.2s;
+  font-weight: 500;
+}
+
+.btn-add-field:hover {
+  border-color: var(--accent);
+  background-color: rgba(0, 229, 255, 0.05);
+}
+
+/* 3. Advanced Options Groups */
+.advanced-options-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.5rem;
+  padding: 1.5rem;
+  background-color: var(--bg-dark);
+  border-radius: 12px;
+  margin-bottom: 2rem;
+}
+
+.option-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.option-label {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.option-input, .option-select {
+  padding: 0.75rem;
+  background-color: var(--bg-darker);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  width: 100%;
+}
+
+.option-input:focus, .option-select:focus {
+  border-color: var(--primary);
+  outline: none;
+}
+
+/* Toggle Advanced Button */
+.advanced-toggle-btn {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+  background-color: var(--bg-dark);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text-primary);
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: 1rem;
+}
+
+.advanced-toggle-btn.active {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.advanced-content {
+  display: none;
+}
+
+.advanced-content.expanded {
+  display: block;
+  animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* 4. Listes de pages (Paths) */
+.paths-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.path-item {
+  display: flex;
+  align-items: flex-start; /* Alignement en haut pour gérer les textes longs */
+  gap: 1rem;
+  padding: 1rem;
+  background-color: var(--bg-darker);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.path-item:hover {
+  border-color: var(--accent);
+  background-color: rgba(0, 229, 255, 0.05);
+  transform: translateX(4px);
+}
+
+.path-icon {
+  font-size: 1.2rem;
+  min-width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+  color: var(--text-secondary);
+}
+
+.path-url {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  word-break: break-all;
+  line-height: 1.5;
+  flex: 1;
+}
+
+/* Style spécifique pour les liens dans le texte */
+.path-url a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.path-url a:hover {
+  text-decoration: underline;
+}
+
+.subdomain-group-title {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+  color: var(--text-primary);
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background-color: rgba(255, 77, 0, 0.1);
+  border-radius: 50%;
+  font-size: 1rem;
+}
+
+.all-paths-group {
+  margin-top: 2rem;
+  padding: 1.5rem;
+  background-color: var(--bg-dark);
+  border-radius: 12px;
+  border: 1px dashed var(--border);
+}
+
+/* 5. Contenus Scrapables (Content Types) */
+.content-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1.5rem;
+  margin-top: 1.5rem;
+}
+
+.content-type-card {
+  position: relative;
+  background-color: var(--bg-darker);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.5rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.content-type-card:hover {
+  transform: translateY(-4px);
+  border-color: var(--primary);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+}
+
+.content-type-card.selected {
+  border-color: var(--primary);
+  background-color: rgba(255, 77, 0, 0.05);
+  box-shadow: 0 0 0 1px var(--primary);
+}
+
+.checkbox-indicator {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--border);
+  border-radius: 4px;
+  background-color: var(--bg-dark);
+  transition: all 0.2s;
+}
+
+.content-type-card.selected .checkbox-indicator {
+  background-color: var(--primary);
+  border-color: var(--primary);
+}
+
+.content-type-card.selected .checkbox-indicator::after {
+  content: '✓';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: white;
+  font-size: 14px;
+  font-weight: bold;
+}
+
+.content-icon {
+  font-size: 2rem;
+  color: var(--accent);
+  margin-bottom: 1rem;
+}
+
+.content-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+  color: var(--text-primary);
+}
+
+.content-description {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  margin-bottom: 1rem;
+  flex-grow: 1;
+  line-height: 1.5;
+}
+
+.content-count {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+  margin-top: auto;
+}
+
+/* Paths list improvements */
+.path-item a {
+  color: var(--accent);
+  text-decoration: none;
+  word-break: break-all;
+  font-size: 0.9rem;
+}
+
+.path-item a:hover {
+  text-decoration: underline;
+}
+
+.path-item .material-icons {
+  font-size: 1.1rem;
+  min-width: 20px;
+}
+
+.btn-primary {
+    background-color: var(--primary);
+    color: white;
+    padding: 0.875rem 1.5rem;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.btn-primary:hover {
+    background-color: var(--primary-dark);
+}
+
+.btn-primary .material-icons {
+    font-size: 1.2rem;
+}
+
 /* ===== MAIN CONTENT ===== */
 .main-content {
     margin-left: 280px;
@@ -96,6 +918,26 @@
     display: flex;
     gap: 1rem;
     align-items: center;
+}
+
+.btn-theme-toggle {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-theme-toggle:hover {
+    background-color: var(--bg-hover);
+    color: var(--primary);
+    border-color: var(--primary);
 }
 
 .user-profile {
