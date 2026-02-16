@@ -14,7 +14,7 @@ Plateforme de web scraping automatisée et intelligente, conçue pour extraire, 
 
 ## Aperçu
 
-Scraper Pro est une solution clé en main pour le scraping de données. Elle combine une interface utilisateur intuitive avec un backend puissant capable de contourner les protections anti-bot modernes. Idéale pour les développeurs, data analysts et entreprises ayant besoin de collecter des données structurées.
+Scraper Pro est une solution clé en main pour le scraping de données. Elle combine une interface utilisateur intuitive avec un backend puissant capable de contourner les protections anti-bot moderne[...]
 
 ### Points Clés
 
@@ -59,19 +59,20 @@ Suivez ces étapes pour installer Scraper Pro sur votre machine locale.
 - **Python 3.11+**
 - **Node.js 18+**
 - **Git**
+- **Playwright** (Python & Node)
 
 ### 1. Récupération du Projet
 
 Clonez le dépôt sur votre machine :
 
 ```bash
-git clone https://github.com/votre-username/scraper-pro.git
+git clone https://github.com/keizenx/scraper-pro.git
 cd scraper-pro
 ```
 
 ### 2. Installation Automatisée (Recommandée)
 
-**Backend (Python/Django) :**
+**Backend (Python/Django + Playwright) :**
 
 Ouvrez un terminal dans le dossier `backend` :
 
@@ -85,8 +86,11 @@ venv\Scripts\activate
 # Activation (Mac/Linux)
 # source venv/bin/activate
 
-# Installation des dépendances
+# Installation des dépendances Python
 pip install -r requirements.txt
+
+# Installation de Playwright pour Python
+pip install playwright
 
 # Installation des navigateurs Playwright
 playwright install chromium
@@ -100,15 +104,21 @@ python manage.py runserver
 
 Le serveur backend sera accessible sur `http://localhost:8000`.
 
-**Frontend (React/Vite) :**
+**Frontend (React/Vite + Playwright pour Node) :**
 
 Ouvrez un nouveau terminal dans le dossier `frontend` :
 
 ```bash
 cd frontend
 
-# Installation des dépendances
+# Installation des dépendances Node.js
 npm install
+
+# Installation de Playwright côté Node (si besoin pour des tests ou l'automatisation côté front)
+npm install --save-dev playwright
+
+# (Optionnel) Installation des navigateurs Playwright pour Node
+npx playwright install chromium
 
 # Démarrage du serveur de développement
 npm run dev
