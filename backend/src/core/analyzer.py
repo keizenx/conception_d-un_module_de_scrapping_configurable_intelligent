@@ -393,9 +393,93 @@ def analyze_url(
     detector = ContentDetector()
     content_analysis = detector.detect_content_types(html, url)
     
-    # Validation AI des types détectés
+    # -----------------------------------------------------------
+    # INTELLIGENCE ARTIFICIELLE (LLM / Perplexity)
+    # -----------------------------------------------------------
+    # Si disponible, on utilise un LLM pour valider/affiner l'analyse
+    try:
+        from src.core.llm_classifier import LLMClassifier
+        llm = LLMClassifier() # Cherche la clé dans os.environ["LLM_API_KEY"]
+        
+        # On extrait juste le texte pour le LLM (pas tout le HTML lourd)
+        text_preview = soup.get_text(separator=' ', strip=True)
+        
+        llm_result = llm.analyze_page(
+            url, 
+            text_preview, 
+            [t['type'] for t in content_analysis.get('detected_types', [])]
+        )
+        
+        if llm_result:
+            print(f"[+] LLM Analysis ({llm.provider}): {llm_result.get('description_générale', llm_result.get('summary'))}")
+            # Enrichir l'analyse avec le résultat LLM
+            content_analysis['ai_classification'] = llm_result
+            
+            # Si le LLM est très confiant, on peut ajuster les types détectés
+            if llm_result.get('confiance_de_classification', 0) > 0.8:
+                primary_type = llm_result.get('catégorie_principale')
+                # Prioriser ce type dans la liste si possible (mapping approximatif)
+                # ... logique existante ou simplifiée
+                pass
+    except Exception as e:
+        print(f"[-] LLM Integration skipped: {e}")
+
+    # Validation AI (Heuristique locale) des types détectés
+    # On valide TOUJOURS ce que Perplexity/LLM a trouvé comme type principal s'il est confiant
+    # même si l'heuristique locale a échoué (fallback)
     validator = AIStructureValidator()
+    
+    if content_analysis.get('ai_classification'):
+        ai_res = content_analysis['ai_classification']
+        if ai_res.get('confiance_de_classification', 0) > 0.8:
+            # Injecter le type principal détecté par IA s'il n'est pas déjà dans la liste
+            primary_type_map = {
+                'E-commerce': 'products',
+                'Blog': 'articles',
+                'Marketplace': 'products', # ou listings
+                'Véhicules': 'vehicles',
+                'Automobile': 'vehicles',
+                'Voiture': 'vehicles',
+                'Immobilier': 'real_estate',
+                'Location': 'products', # Générique
+                'News': 'articles',
+                'Presse': 'articles'
+            }
+            
+            # Essayer de mapper la catégorie principale de l'IA vers nos types internes
+            cat_ia = ai_res.get('catégorie_principale', '')
+            internal_type = None
+            
+            for key, val in primary_type_map.items():
+                if key.lower() in cat_ia.lower():
+                    internal_type = val
+                    break
+            
+            if internal_type:
+                # Vérifier si ce type est déjà détecté
+                exists = False
+                for t in content_analysis['detected_types']:
+                    if t['type'] == internal_type:
+                        t['confidence'] = 0.99 # Boost confidence
+                        exists = True
+                        break
+                
+                # Si non détecté par regex mais vu par IA, on l'ajoute artificiellement
+                if not exists:
+                    # On crée une fausse entrée basée sur l'IA pour forcer l'apparition
+                    content_analysis['detected_types'].insert(0, {
+                        'type': internal_type,
+                        'name': f"{ai_res.get('catégorie_principale')} (Détecté par IA)",
+                        'icon': 'auto_awesome',
+                        'count': 'N/A', # On ne sait pas combien sans regex
+                        'confidence': 0.95,
+                        'scrapable': True,
+                        'fields': ai_res.get('type_de_contenu', []),
+                        'ai_generated': True
+                    })
+
     if content_analysis.get('detected_types'):
+        print("[*] Analyse du contenu...")
         validation_result = validator.validate_all_detected_types(
             html, 
             content_analysis['detected_types']

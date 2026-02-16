@@ -363,3 +363,28 @@ class Webhook(models.Model):
     
     def __str__(self):
         return f"{self.url[:50]} - {len(self.events)} événements"
+
+
+class KnownPath(models.Model):
+    """
+    Base de connaissances des chemins/répertoires par domaine.
+    Permet la découverte incrémentale.
+    """
+    domain = models.CharField(max_length=255, db_index=True)
+    url = models.URLField(max_length=2000)
+    path = models.CharField(max_length=2000)
+    
+    first_seen = models.DateTimeField(auto_now_add=True)
+    last_seen = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'known_paths'
+        unique_together = ('domain', 'path')
+        verbose_name = 'Chemin connu'
+        verbose_name_plural = 'Chemins connus'
+        indexes = [
+            models.Index(fields=['domain', 'path']),
+        ]
+    
+    def __str__(self):
+        return f"{self.domain} - {self.path}"

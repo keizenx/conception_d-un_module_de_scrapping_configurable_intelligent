@@ -84,7 +84,7 @@ import '../../assets/css/login.css';
 
       <nav className="login-nav">
         <Link to="/" className="logo">
-          <span className="logo-icon">◆</span>
+          <span className="material-icons logo-icon">view_in_ar</span>
           <span>SCRAPER PRO</span>
         </Link>
       </nav>
@@ -93,7 +93,7 @@ import '../../assets/css/login.css';
         <div className="login-card">
           <div className="login-header">
             <div className="icon-wrapper">
-              <span className="login-icon">⚡</span>
+              <span className="material-icons login-icon">bolt</span>
             </div>
             <h1>{show2FA ? 'Vérification 2FA' : 'Connexion'}</h1>
             <p className="subtitle">{show2FA ? 'Entrez le code reçu par email' : 'Accédez à votre espace de scraping'}</p>
@@ -102,7 +102,7 @@ import '../../assets/css/login.css';
           <form onSubmit={handleSubmit} className="login-form">
             {error && (
               <div className="error-message">
-                <span className="error-icon">⚠</span>
+                <span className="material-icons error-icon">warning</span>
                 {error}
               </div>
             )}
@@ -111,7 +111,7 @@ import '../../assets/css/login.css';
               <>
                 <div className="form-group">
                   <label htmlFor="email">
-                    <span className="label-icon">✉</span>
+                    <span className="material-icons label-icon">email</span>
                     Email
                   </label>
                   <input
@@ -182,7 +182,7 @@ import '../../assets/css/login.css';
               ) : (
                 <>
                   <span>{show2FA ? 'Vérifier' : 'Se connecter'}</span>
-                  <span className="btn-icon">→</span>
+                  <span className="material-icons btn-icon">arrow_forward</span>
                 </>
               )}
             </button>

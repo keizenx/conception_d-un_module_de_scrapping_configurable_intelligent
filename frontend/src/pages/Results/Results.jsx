@@ -10,30 +10,32 @@ import '../../assets/css/results.css';
 
 // Mapping des catégories vers des noms et icônes français
 const CATEGORY_CONFIG = {
-  main_headings: { icon: '📌', name: 'Titres Principaux', color: '#FF4D00' },
-  section_headings: { icon: '📑', name: 'Titres de Section', color: '#00E5FF' },
-  sub_headings: { icon: '📎', name: 'Sous-titres', color: '#00FF88' },
-  paragraphs: { icon: '📝', name: 'Paragraphes', color: '#FFB800' },
-  links: { icon: '🔗', name: 'Liens', color: '#9D4EDD' },
-  buttons: { icon: '🔘', name: 'Boutons', color: '#FF6B6B' },
-  lists: { icon: '📋', name: 'Listes', color: '#4ECDC4' },
-  navigation: { icon: '🧭', name: 'Navigation', color: '#45B7D1' },
-  footer: { icon: '📄', name: 'Pied de page', color: '#6C757D' },
-  code: { icon: '💻', name: 'Code', color: '#20C997' },
-  other: { icon: '📦', name: 'Autres contenus', color: '#ADB5BD' },
-  images: { icon: '🖼️', name: 'Images', color: '#E91E63' },
-  image: { icon: '🖼️', name: 'Images', color: '#E91E63' },
-  videos: { icon: '🎬', name: 'Vidéos', color: '#FF5722' },
-  video: { icon: '🎬', name: 'Vidéos', color: '#FF5722' },
-  audios: { icon: '🎵', name: 'Audio', color: '#9C27B0' },
-  documents: { icon: '📑', name: 'Documents', color: '#607D8B' },
-  text: { icon: '📝', name: 'Texte', color: '#FFB800' }
+  main_headings: { icon: 'title', name: 'Titres Principaux', color: '#FF4D00' },
+  section_headings: { icon: 'format_size', name: 'Titres de Section', color: '#00E5FF' },
+  sub_headings: { icon: 'text_fields', name: 'Sous-titres', color: '#00FF88' },
+  paragraphs: { icon: 'segment', name: 'Paragraphes', color: '#FFB800' },
+  links: { icon: 'link', name: 'Liens', color: '#9D4EDD' },
+  buttons: { icon: 'smart_button', name: 'Boutons', color: '#FF6B6B' },
+  lists: { icon: 'format_list_bulleted', name: 'Listes', color: '#4ECDC4' },
+  navigation: { icon: 'menu', name: 'Navigation', color: '#45B7D1' },
+  footer: { icon: 'vertical_align_bottom', name: 'Pied de page', color: '#6C757D' },
+  code: { icon: 'code', name: 'Code', color: '#20C997' },
+  other: { icon: 'inventory_2', name: 'Autres contenus', color: '#ADB5BD' },
+  images: { icon: 'image', name: 'Images', color: '#E91E63' },
+  image: { icon: 'image', name: 'Images', color: '#E91E63' },
+  videos: { icon: 'movie', name: 'Vidéos', color: '#FF5722' },
+  video: { icon: 'movie', name: 'Vidéos', color: '#FF5722' },
+  audios: { icon: 'audiotrack', name: 'Audio', color: '#9C27B0' },
+  documents: { icon: 'description', name: 'Documents', color: '#607D8B' },
+  ecommerce: { icon: 'shopping_cart', name: 'Produits', color: '#E91E63' },
+  product: { icon: 'shopping_bag', name: 'Produits', color: '#E91E63' },
+  text: { icon: 'text_snippet', name: 'Texte', color: '#FFB800' }
 };
 
 // Helper pour obtenir la config d'une catégorie
 const getCategoryConfig = (category) => {
   const key = category?.toLowerCase().replace(/[\s-]/g, '_');
-  return CATEGORY_CONFIG[key] || { icon: '📦', name: category || 'Contenu', color: '#ADB5BD' };
+  return CATEGORY_CONFIG[key] || { icon: 'inventory_2', name: category || 'Contenu', color: '#ADB5BD' };
 };
 
 function Results() {
@@ -160,9 +162,10 @@ function Results() {
           
           // Pour les médias groupés
           const isMediaGroup = item.type_media && isGrouped;
-          const isImage = type === 'image' || item.categorie === 'images';
-          const isVideo = type === 'video' || item.categorie === 'videos';
-          const isLink = type === 'link' || item.categorie === 'links';
+          const isImage = type === 'image' || type === 'images' || item.categorie === 'images';
+          const isProduct = type === 'ecommerce' || type === 'product' || item.category === 'ecommerce';
+          const isVideo = type === 'video' || type === 'videos' || item.categorie === 'videos';
+          const isLink = type === 'link' || type === 'links' || item.categorie === 'links';
           
           // Construire le contenu selon le type
           let content = '';
@@ -178,24 +181,26 @@ function Results() {
               content = elements.join('\n\n');
             }
           } else {
-            content = item.contenu || item.content || item.apercu || '';
+            // Priority to description, then content, then preview
+            content = item.description || item.contenu || item.content || item.apercu || '';
           }
           
           return {
             id: index + 1,
-            title: titre,
+            title: titre || (isProduct ? "Produit sans titre" : "Sans titre"),
             category: item.categorie || type,
             content: content,
             preview: item.apercu || content.substring(0, 150),
             isGrouped,
             isMediaGroup,
             isImage,
+            isProduct,
             isVideo,
             isLink,
             nbElements: item.nb_elements || 1,
             elements: elements,
             // Pour les images groupées
-            imageSrc: isImage && elements.length > 0 ? elements[0].src : (item.url_media || null),
+            imageSrc: (isImage && elements.length > 0 ? elements[0].src : (item.url_media || null)) || (isProduct ? item.image : null),
             videoSrc: isVideo && elements.length > 0 ? elements[0].src : null,
             linkHref: isLink ? (item.href || item.url || null) : null,
             rawData: item
@@ -371,24 +376,24 @@ function Results() {
   const generatePDF = async (data, filename) => {
     // Organiser les données par catégorie pour un rapport structuré
     const categoryIcons = {
-      'main_headings': '📌',
-      'section_headings': '📑',
-      'sub_headings': '📎',
-      'paragraphs': '📝',
-      'links': '🔗',
-      'buttons': '🔘',
-      'lists': '📋',
-      'navigation': '🧭',
-      'footer': '📄',
-      'code': '💻',
-      'other': '📦',
-      'images': '🖼️',
-      'image': '🖼️',
-      'videos': '🎬',
-      'video': '🎬',
-      'audios': '🎵',
-      'documents': '📄',
-      'text': '📝'
+      'main_headings': 'title',
+      'section_headings': 'format_size',
+      'sub_headings': 'text_fields',
+      'paragraphs': 'segment',
+      'links': 'link',
+      'buttons': 'smart_button',
+      'lists': 'format_list_bulleted',
+      'navigation': 'menu',
+      'footer': 'vertical_align_bottom',
+      'code': 'code',
+      'other': 'inventory_2',
+      'images': 'image',
+      'image': 'image',
+      'videos': 'movie',
+      'video': 'movie',
+      'audios': 'audiotrack',
+      'documents': 'description',
+      'text': 'text_snippet'
     };
 
     const categoryNames = {
@@ -422,7 +427,7 @@ function Results() {
           ${item.elements.map(img => `
             <div class="image-card">
               <img src="${img.src}" alt="${img.alt || 'Image'}" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
-              <div class="image-error" style="display:none;">❌ Image non chargée</div>
+              <div class="image-error" style="display:none;"><span class="material-icons" style="vertical-align: middle; font-size: 1.2em;">broken_image</span> Image non chargée</div>
               <div class="image-caption">${img.alt || img.title || img.src?.split('/').pop()?.substring(0, 30) || 'Image'}</div>
             </div>
           `).join('')}
@@ -439,7 +444,7 @@ function Results() {
         <div class="links-list">
           ${item.elements.map(link => `
             <div class="link-item">
-              <span class="link-icon">🔗</span>
+              <span class="material-icons link-icon">link</span>
               <a href="${link.href || link.src || '#'}" target="_blank">${link.title || link.text || link.href || 'Lien'}</a>
               ${link.href ? `<span class="link-url">${link.href}</span>` : ''}
             </div>
@@ -470,6 +475,7 @@ function Results() {
       <head>
         <meta charset="UTF-8">
         <title>Rapport de Scraping - ${filename}</title>
+        <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
         <style>
           * { box-sizing: border-box; }
           body { 
@@ -715,7 +721,7 @@ function Results() {
       <body>
         <!-- En-tête du rapport -->
         <div class="report-header">
-          <h1>📊 Rapport de Scraping</h1>
+          <h1><span class="material-icons" style="vertical-align: middle; margin-right: 10px; font-size: 1.2em;">bar_chart</span> Rapport de Scraping</h1>
           <div class="report-meta">
             <div class="report-meta-item">
               <span class="report-meta-label">Session:</span>
@@ -742,7 +748,7 @@ function Results() {
           <div class="summary-stats">
             ${data.map(item => `
               <div class="stat-badge">
-                <span class="stat-icon">${categoryIcons[item.category] || '📦'}</span>
+                <span class="material-icons stat-icon">${categoryIcons[item.category] || 'inventory_2'}</span>
                 <span class="stat-count">${item.nbElements || 1}</span>
                 <span class="stat-label">${categoryNames[item.category] || item.category || 'Contenu'}</span>
               </div>
@@ -756,7 +762,7 @@ function Results() {
         ${data.map((item, idx) => `
           <div class="category-section">
             <div class="category-header">
-              <span class="category-icon">${categoryIcons[item.category] || '📦'}</span>
+              <span class="material-icons category-icon">${categoryIcons[item.category] || 'inventory_2'}</span>
               <h3 class="category-title">${categoryNames[item.category] || item.title || 'Contenu'}</h3>
               ${item.nbElements > 1 ? `<span class="category-count">${item.nbElements} éléments</span>` : ''}
             </div>
@@ -818,6 +824,21 @@ function Results() {
     setShowExportModal(true);
   };
   
+  // Remplacer l'ancienne fonction d'export PDF par celle-ci
+  const handlePDFExport = async (dataToExport) => {
+    const content = generatePDFContent(dataToExport);
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(content);
+      printWindow.document.close();
+      setTimeout(() => {
+          printWindow.print();
+      }, 1000);
+    } else {
+      alert("Impossible d'ouvrir la fenêtre d'impression. Vérifiez votre bloqueur de pop-up.");
+    }
+  };
+
   // Fonction d'export confirmée après sélection
   const handleConfirmExport = async () => {
     const format = exportModalFormat;
@@ -831,7 +852,11 @@ function Results() {
       try {
         // Filtrer les résultats selon la sélection
         const dataToExport = getFilteredDataForExport();
-        await generatePDF(dataToExport, `scraping_session_${sessionId}`);
+        // Appel de la nouvelle fonction
+        await handlePDFExport(dataToExport);
+      } catch (e) {
+        console.error("Erreur PDF:", e);
+        alert("Erreur lors de la génération du PDF");
       } finally {
         setExportingFormat(null);
       }
@@ -876,13 +901,135 @@ function Results() {
   
   // Obtenir les données filtrées pour l'export
   const getFilteredDataForExport = () => {
+    // Si on exporte uniquement la sélection
     if (exportSelectedOnly && selectedItems.size > 0) {
-      // Exporter uniquement les items sélectionnés
-      return results.filter(item => selectedItems.has(item.id));
-    } else {
-      // Exporter selon la limite
-      return results.slice(0, exportLimit);
+       return results.filter(item => selectedItems.has(item.id));
     }
+    
+    // Sinon on exporte tout (ou filtré par catégorie actuelle si on voulait)
+    // Ici on prend tout results, slice selon la limite
+    return results.slice(0, exportLimit);
+  };
+
+  // Générer le contenu HTML du PDF
+  const generatePDFContent = (dataToExport) => {
+    // Config pour les catégories
+    const categoryNames = {
+      'ecommerce': 'Produits E-commerce',
+      'images': 'Galerie Images',
+      'text': 'Contenu Textuel',
+      'main_headings': 'Titres Principaux',
+      'section_headings': 'Titres de Section',
+      'sub_headings': 'Sous-titres',
+      'paragraphs': 'Paragraphes'
+    };
+    
+    // Style CSS pour le PDF
+    const styles = `
+      body { font-family: 'Helvetica', sans-serif; padding: 20px; color: #333; }
+      .header { text-align: center; border-bottom: 3px solid #FF4D00; padding-bottom: 20px; margin-bottom: 30px; }
+      .title { font-size: 24px; color: #FF4D00; font-weight: bold; margin: 0; }
+      .meta { color: #666; font-size: 14px; margin-top: 10px; }
+      .section { margin-bottom: 30px; page-break-inside: avoid; }
+      .section-header { background: #f8f9fa; padding: 10px 15px; border-left: 5px solid #FF4D00; margin-bottom: 15px; }
+      .section-title { font-size: 18px; font-weight: bold; margin: 0; color: #333; }
+      .item { margin-bottom: 15px; border: 1px solid #eee; padding: 15px; border-radius: 5px; }
+      .item-title { font-weight: bold; margin-bottom: 5px; color: #222; }
+      .item-content { font-size: 14px; line-height: 1.5; color: #555; }
+      .item-context { font-size: 12px; color: #999; margin-top: 5px; font-style: italic; }
+      .gallery { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+    `;
+
+    return `
+      <html>
+      <head><style>${styles}</style></head>
+      <body>
+        <div class="header">
+          <h1 class="title">Rapport de Scraping</h1>
+          <div class="meta">
+            Session #${sessionId} • ${new Date().toLocaleDateString()} • ${sessionInfo?.url || ''}
+          </div>
+        </div>
+        
+        ${dataToExport.map(item => {
+          const catName = categoryNames[item.category] || item.category || 'Autre';
+          
+          let contentHtml = '';
+          
+          if (item.isProduct) {
+            contentHtml = `
+              <div class="item">
+                <div class="item-title">🛍️ ${item.title}</div>
+                ${item.imageSrc ? `<img src="${item.imageSrc}" style="max-width: 200px; margin: 10px 0; border-radius: 5px;" />` : ''}
+                <div class="item-content">${item.content || item.description || ''}</div>
+                <div class="item-context">Source: ${item.url_produit || 'N/A'}</div>
+              </div>
+            `;
+          } else if (item.isGrouped && item.elements) {
+            // Gestion spéciale pour les galeries d'images dans le PDF
+            if (item.isImage || item.isMediaGroup && item.category === 'images') {
+                contentHtml = `
+                  <div class="item">
+                    <div class="item-title">${item.title} (${item.nbElements} images)</div>
+                    <div class="gallery">
+                      ${item.elements.map(el => `
+                        <div style="display: inline-block; width: 150px; margin: 5px; vertical-align: top; text-align: center;">
+                            <img src="${el.src}" style="width: 100%; height: 100px; object-fit: cover; border-radius: 4px; border: 1px solid #ddd;" />
+                            <div style="font-size: 10px; color: #666; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${el.alt || el.title || 'Image'}</div>
+                        </div>
+                      `).join('')}
+                    </div>
+                  </div>
+                `;
+            } else {
+                // Autres éléments groupés (texte, liens, etc.)
+                contentHtml = `
+                  <div class="item">
+                    <div class="item-title">${item.title} (${item.nbElements} éléments)</div>
+                    <ul style="padding-left: 20px; margin: 10px 0;">
+                      ${item.elements.map(el => {
+                         const text = typeof el === 'string' ? el : (el.text || el.title || el.src);
+                         const ctx = typeof el === 'object' && el.context ? el.context : '';
+                         // Si c'est un lien vidéo
+                         if (item.isVideo && el.src) {
+                            return `<li style="margin-bottom: 8px;">
+                                <a href="${el.src}" target="_blank" style="color: #FF4D00;">🎥 ${text}</a>
+                            </li>`;
+                         }
+                         return `<li style="margin-bottom: 8px;">
+                            <span style="color: #444;">${text}</span>
+                            ${ctx ? `<div class="item-context">${ctx}</div>` : ''}
+                         </li>`;
+                      }).join('')}
+                    </ul>
+                  </div>
+                `;
+            }
+          } else {
+            contentHtml = `
+              <div class="item">
+                <div class="item-title">${item.title}</div>
+                <div class="item-content">${item.content || item.preview}</div>
+              </div>
+            `;
+          }
+
+          return `
+            <div class="section">
+              <div class="section-header">
+                <h3 class="section-title">${catName}</h3>
+              </div>
+              ${contentHtml}
+            </div>
+          `;
+        }).join('')}
+        
+        <div style="text-align: center; margin-top: 50px; color: #999; font-size: 12px;">
+          Généré par Scraper Pro
+        </div>
+      </body>
+      </html>
+    `;
   };
 
   // Re-scraper le site avec la même configuration
@@ -914,7 +1061,7 @@ function Results() {
       {/* Sidebar - SEULEMENT le logo */}
       <aside className="sidebar">
         <div className="logo" onClick={() => navigate('/dashboard')} style={{ cursor: 'pointer' }}>
-          <div className="logo-icon">⚡</div>
+          <span className="material-icons logo-icon">flash_on</span>
           SCRAPER PRO
         </div>
       </aside>
@@ -931,9 +1078,9 @@ function Results() {
             <div className="info-item">
               <span className="info-label">Statut</span>
               <span className={`status-badge status-${sessionInfo?.status || 'success'}`}>
-                {sessionInfo?.status === 'completed' ? '✓ Terminé' : 
-                 sessionInfo?.status === 'running' ? '⏳ En cours' : 
-                 sessionInfo?.status === 'error' ? '✕ Erreur' : '✓ Terminé'}
+                {sessionInfo?.status === 'completed' ? <><span className="material-icons" style={{fontSize: '1rem', marginRight: '4px'}}>check_circle</span> Terminé</> : 
+                 sessionInfo?.status === 'running' ? <><span className="material-icons" style={{fontSize: '1rem', marginRight: '4px'}}>hourglass_empty</span> En cours</> : 
+                 sessionInfo?.status === 'error' ? <><span className="material-icons" style={{fontSize: '1rem', marginRight: '4px'}}>error</span> Erreur</> : <><span className="material-icons" style={{fontSize: '1rem', marginRight: '4px'}}>check_circle</span> Terminé</>}
               </span>
             </div>
             <div className="info-item">
@@ -949,7 +1096,7 @@ function Results() {
               onClick={handleRescrape}
               title="Lancer un nouveau scraping avec la même configuration"
             >
-              <span>🔄</span>
+              <span className="material-icons">refresh</span>
               Re-scraper
             </button>
           </div>
@@ -958,7 +1105,7 @@ function Results() {
         {/* Controls Bar */}
         <div className="controls-bar">
           <div className="search-box">
-            <span className="search-icon">🔍</span>
+            <span className="material-icons search-icon">search</span>
             <input
               type="text"
               className="search-input"
@@ -973,21 +1120,21 @@ function Results() {
               className={`filter-btn ${activeFilter === 'all' ? 'active' : ''}`}
               onClick={() => setActiveFilter('all')}
             >
-              <span>📦</span>
+              <span className="material-icons">inventory_2</span>
               Tous
             </button>
             <button
               className={`filter-btn ${activeFilter === 'new' ? 'active' : ''}`}
               onClick={() => setActiveFilter('new')}
             >
-              <span>⚡</span>
+              <span className="material-icons">flash_on</span>
               En stock
             </button>
             <button
               className={`filter-btn ${activeFilter === 'errors' ? 'active' : ''}`}
               onClick={() => setActiveFilter('errors')}
             >
-              <span>⚠️</span>
+              <span className="material-icons">warning</span>
               Erreurs
             </button>
           </div>
@@ -998,7 +1145,7 @@ function Results() {
               onClick={() => handleExport('CSV')}
               disabled={exportingFormat !== null}
             >
-              <span>{exportingFormat === 'csv' ? '⏳' : '📄'}</span>
+              {exportingFormat === 'csv' ? <span className="material-icons spin">hourglass_empty</span> : <span className="material-icons">description</span>}
               {exportingFormat === 'csv' ? 'Export...' : 'CSV'}
             </button>
             <button 
@@ -1006,7 +1153,7 @@ function Results() {
               onClick={() => handleExport('Excel')}
               disabled={exportingFormat !== null}
             >
-              <span>{exportingFormat === 'excel' ? '⏳' : '📊'}</span>
+              {exportingFormat === 'excel' ? <span className="material-icons spin">hourglass_empty</span> : <span className="material-icons">bar_chart</span>}
               {exportingFormat === 'excel' ? 'Export...' : 'Excel'}
             </button>
             <button 
@@ -1014,7 +1161,7 @@ function Results() {
               onClick={() => handleExport('JSON')}
               disabled={exportingFormat !== null}
             >
-              <span>{exportingFormat === 'json' ? '⏳' : '🔧'}</span>
+              {exportingFormat === 'json' ? <span className="material-icons spin">hourglass_empty</span> : <span className="material-icons">code</span>}
               {exportingFormat === 'json' ? 'Export...' : 'JSON'}
             </button>
             <button 
@@ -1022,7 +1169,7 @@ function Results() {
               onClick={() => handleExport('PDF')}
               disabled={exportingFormat !== null}
             >
-              <span>{exportingFormat === 'pdf' ? '⏳' : '📕'}</span>
+              {exportingFormat === 'pdf' ? <span className="material-icons spin">hourglass_empty</span> : <span className="material-icons">picture_as_pdf</span>}
               {exportingFormat === 'pdf' ? 'Export...' : 'PDF'}
             </button>
             <button 
@@ -1030,7 +1177,7 @@ function Results() {
               onClick={() => handleExport('XML')}
               disabled={exportingFormat !== null}
             >
-              <span>{exportingFormat === 'xml' ? '⏳' : '📋'}</span>
+              {exportingFormat === 'xml' ? <span className="material-icons spin">hourglass_empty</span> : <span className="material-icons">assignment</span>}
               {exportingFormat === 'xml' ? 'Export...' : 'XML'}
             </button>
             <button 
@@ -1039,9 +1186,9 @@ function Results() {
               disabled={exportingFormat !== null}
               title={exportingFormat === 'zip_images' ? 'Téléchargement des images en cours...' : (includeImagesZip ? 'Option sélectionnée depuis la configuration' : 'Télécharger les images en ZIP')}
             >
-              <span>{exportingFormat === 'zip_images' ? '⏳' : '🖼️'}</span>
+              {exportingFormat === 'zip_images' ? <span className="material-icons spin">hourglass_empty</span> : <span className="material-icons">image</span>}
               {exportingFormat === 'zip_images' ? 'Téléchargement...' : 'ZIP Images'}
-              {includeImagesZip && !exportingFormat && <span className="highlight-badge">★</span>}
+              {includeImagesZip && !exportingFormat && <span className="material-icons highlight-badge">star</span>}
             </button>
           </div>
         </div>
@@ -1050,24 +1197,24 @@ function Results() {
         {selectedItems.size > 0 && (
           <div className="selection-bar">
             <div className="selection-info">
-              <span className="selection-count">✓ {selectedItems.size} élément(s) sélectionné(s)</span>
+              <span className="selection-count"><span className="material-icons" style={{verticalAlign: 'middle', fontSize: '1.2em'}}>check</span> {selectedItems.size} élément(s) sélectionné(s)</span>
               <button className="clear-selection-btn" onClick={() => { setSelectedItems(new Set()); setSelectAll(false); }}>
-                ✕ Désélectionner
+                <span className="material-icons">close</span> Désélectionner
               </button>
             </div>
             <div className="selection-actions">
               <span className="export-label">Exporter la sélection :</span>
               <button className="export-selection-btn" onClick={() => handleExportSelected('csv')}>
-                📄 CSV
+                <span className="material-icons">description</span> CSV
               </button>
               <button className="export-selection-btn" onClick={() => handleExportSelected('excel')}>
-                📊 Excel
+                <span className="material-icons">bar_chart</span> Excel
               </button>
               <button className="export-selection-btn" onClick={() => handleExportSelected('json')}>
-                🔧 JSON
+                <span className="material-icons">code</span> JSON
               </button>
               <button className="export-selection-btn export-btn-pdf" onClick={() => handleExportSelected('pdf')}>
-                📕 PDF
+                <span className="material-icons">picture_as_pdf</span> PDF
               </button>
             </div>
           </div>
@@ -1076,7 +1223,7 @@ function Results() {
         {/* Loading/Error States */}
         {isLoading && (
           <div className="card" style={{padding: '3rem', textAlign: 'center'}}>
-            <div style={{fontSize: '2rem', marginBottom: '1rem'}}>⏳</div>
+            <div className="material-icons spin" style={{fontSize: '3rem', marginBottom: '1rem', color: 'var(--primary-color)'}}>hourglass_empty</div>
             <h3>Chargement des résultats...</h3>
             <p style={{color: 'var(--text-muted)', marginTop: '0.5rem'}}>Veuillez patienter</p>
           </div>
@@ -1085,17 +1232,17 @@ function Results() {
         {/* État sans session */}
         {!isLoading && !sessionId && (
           <div className="empty-state-container">
-            <div className="empty-state-icon">📂</div>
+            <div className="material-icons empty-state-icon">folder_open</div>
             <h2 className="empty-state-title">Aucune session de scraping</h2>
             <p className="empty-state-text">
               Vous n'avez pas de session de scraping active. Lancez une nouvelle analyse pour voir les résultats ici.
             </p>
             <div className="empty-state-actions">
               <button className="empty-state-btn primary" onClick={() => navigate('/analysis')}>
-                🔍 Lancer une analyse
+                <span className="material-icons">search</span> Lancer une analyse
               </button>
               <button className="empty-state-btn secondary" onClick={() => navigate('/dashboard')}>
-                📊 Aller au Dashboard
+                <span className="material-icons">dashboard</span> Aller au Dashboard
               </button>
             </div>
           </div>
@@ -1104,7 +1251,7 @@ function Results() {
         {/* État session trouvée mais pas de données */}
         {!isLoading && !error && sessionId && results.length === 0 && (
           <div className="empty-state-container">
-            <div className="empty-state-icon">📭</div>
+            <div className="material-icons empty-state-icon">inbox</div>
             <h2 className="empty-state-title">Aucune donnée extraite</h2>
             <p className="empty-state-text">
               La session #{sessionId} existe mais ne contient pas de données.
@@ -1114,13 +1261,13 @@ function Results() {
             </p>
             <div className="empty-state-actions">
               <button className="empty-state-btn secondary" onClick={() => window.location.reload()}>
-                🔄 Rafraîchir
+                <span className="material-icons">refresh</span> Rafraîchir
               </button>
               <button className="empty-state-btn primary" onClick={() => navigate('/analysis')}>
-                🔍 Nouvelle analyse
+                <span className="material-icons">search</span> Nouvelle analyse
               </button>
               <button className="empty-state-btn secondary" onClick={() => navigate('/dashboard')}>
-                📊 Dashboard
+                <span className="material-icons">dashboard</span> Dashboard
               </button>
             </div>
           </div>
@@ -1128,13 +1275,13 @@ function Results() {
         
         {error && (
           <div className="error-alert">
-            <div className="error-icon">⚠️</div>
+            <div className="material-icons error-icon">error_outline</div>
             <div className="error-content">
               <h4>Erreur de chargement</h4>
               <p>{error}</p>
               <div className="error-actions">
                 <button className="error-btn" onClick={() => navigate('/dashboard')}>
-                  📊 Retour au Dashboard
+                  <span className="material-icons">dashboard</span> Retour au Dashboard
                 </button>
               </div>
             </div>
@@ -1146,7 +1293,7 @@ function Results() {
         <div className="table-container">
           {/* Dossier du site scrapé */}
           <div className="folder-header">
-            <div className="folder-icon">📁</div>
+            <div className="material-icons folder-icon">folder</div>
             <div className="folder-info">
               <h3 className="folder-name">{sessionInfo?.url ? new URL(sessionInfo.url).hostname : 'Site scrapé'}</h3>
               <span className="folder-url">{sessionInfo?.url || ''}</span>
@@ -1165,7 +1312,7 @@ function Results() {
           
           <div className="folder-content">
             <div className="table-header">
-              <h4 className="table-title">📂 Contenu du dossier</h4>
+              <h4 className="table-title"><span className="material-icons" style={{verticalAlign: 'middle', marginRight: '8px'}}>folder_open</span> Contenu du dossier</h4>
               <span className="table-count">
                 Affichage {startIndex + 1}-{Math.min(startIndex + itemsPerPage, filteredProducts.length)} sur {filteredProducts.length} éléments
               </span>
@@ -1205,17 +1352,27 @@ function Results() {
                   <td>
                     {/* Aperçu visuel selon le type */}
                     <div className="cell-preview">
-                      {item.isImage && item.imageSrc ? (
+                      {item.imageSrc ? (
                         <img src={item.imageSrc} alt={item.title} className="preview-thumbnail" onError={(e) => e.target.style.display='none'} />
                       ) : item.isImage ? (
-                        <div className="preview-icon" style={{ background: getCategoryConfig('images').color + '20', color: getCategoryConfig('images').color }}>🖼️</div>
+                        <div className="preview-icon" style={{ background: getCategoryConfig('images').color + '20', color: getCategoryConfig('images').color }}>
+                          <span className="material-icons">image</span>
+                        </div>
+                      ) : item.isProduct ? (
+                        <div className="preview-icon" style={{ background: getCategoryConfig('ecommerce').color + '20', color: getCategoryConfig('ecommerce').color }}>
+                          <span className="material-icons">shopping_bag</span>
+                        </div>
                       ) : item.isVideo ? (
-                        <div className="preview-icon" style={{ background: getCategoryConfig('videos').color + '20', color: getCategoryConfig('videos').color }}>🎬</div>
+                        <div className="preview-icon" style={{ background: getCategoryConfig('videos').color + '20', color: getCategoryConfig('videos').color }}>
+                          <span className="material-icons">movie</span>
+                        </div>
                       ) : item.isLink ? (
-                        <div className="preview-icon" style={{ background: getCategoryConfig('links').color + '20', color: getCategoryConfig('links').color }}>🔗</div>
+                        <div className="preview-icon" style={{ background: getCategoryConfig('links').color + '20', color: getCategoryConfig('links').color }}>
+                          <span className="material-icons">link</span>
+                        </div>
                       ) : (
                         <div className="preview-icon" style={{ background: getCategoryConfig(item.category).color + '20' }}>
-                          {getCategoryConfig(item.category).icon}
+                          <span className="material-icons">{getCategoryConfig(item.category).icon}</span>
                         </div>
                       )}
                       {item.nbElements > 1 && (
@@ -1226,10 +1383,24 @@ function Results() {
                   <td>
                     <div className="cell-content-wrapper">
                       <div className="cell-title-main">
-                        {getCategoryConfig(item.category).icon} {getCategoryConfig(item.category).name}
-                        {item.nbElements > 1 && <span className="title-count">({item.nbElements})</span>}
+                        {item.isProduct && item.title !== "Produit sans titre" ? (
+                          <>
+                            <span className="material-icons" style={{fontSize: '1.1em', verticalAlign: 'middle', marginRight: '5px'}}>shopping_bag</span>
+                            {item.title}
+                          </>
+                        ) : (
+                          <>
+                            <span className="material-icons" style={{fontSize: '1.1em', verticalAlign: 'middle', marginRight: '5px'}}>{getCategoryConfig(item.category).icon}</span>
+                            {getCategoryConfig(item.category).name}
+                            {item.nbElements > 1 && <span className="title-count">({item.nbElements})</span>}
+                          </>
+                        )}
                       </div>
-                      <div className="cell-preview-text">{item.preview?.substring(0, 80) || '-'}</div>
+                      <div className="cell-preview-text">
+                         {item.isProduct ? (
+                           (item.content && item.content !== "Produit sans titre" ? item.content : item.description || '-')
+                         ).substring(0, 100) : (item.preview?.substring(0, 80) || '-')}
+                      </div>
                     </div>
                   </td>
                   <td>
@@ -1241,16 +1412,20 @@ function Results() {
                         borderColor: getCategoryConfig(item.category).color + '40'
                       }}
                     >
-                      {getCategoryConfig(item.category).icon} {getCategoryConfig(item.category).name}
+                      <span className="material-icons" style={{fontSize: '1em', marginRight: '4px'}}>{getCategoryConfig(item.category).icon}</span>
+                      {getCategoryConfig(item.category).name}
                     </span>
                   </td>
                   <td>
                     <div className="action-buttons">
                       <button className="action-btn preview-btn" onClick={() => openPreview(item)} title="Prévisualiser">
-                        👁️
+                        <span className="material-icons">visibility</span>
                       </button>
                       {item.isMediaGroup && item.elements?.length > 0 && (
                         <span className="elements-badge">{item.nbElements}</span>
+                      )}
+                      {item.isProduct && (
+                        <span className="elements-badge" style={{background: '#E91E63'}}><span className="material-icons" style={{fontSize: '1em'}}>shopping_bag</span></span>
                       )}
                     </div>
                   </td>
@@ -1314,23 +1489,28 @@ function Results() {
             <div className="preview-modal" onClick={(e) => e.stopPropagation()}>
               <div className="preview-modal-header">
                 <h3>{previewItem.title || 'Prévisualisation'}</h3>
-                <button className="preview-close-btn" onClick={() => setShowPreview(false)}>✕</button>
+                <button className="preview-close-btn" onClick={() => setShowPreview(false)}><span className="material-icons">close</span></button>
               </div>
               
               <div className="preview-modal-body">
                 {/* Info groupement */}
                 {previewItem.isGrouped && (
                   <div className="preview-group-info">
-                    <span className="group-badge">📦 {previewItem.nbElements} éléments groupés</span>
+                    <span className="group-badge"><span className="material-icons" style={{verticalAlign: 'middle', marginRight: '4px'}}>inventory_2</span> {previewItem.nbElements} éléments groupés</span>
                   </div>
                 )}
 
                 {/* Contenu principal */}
                 <div className="preview-content-section">
                   {/* Galerie d'images groupées */}
+                  {previewItem.imageSrc && !previewItem.isGrouped && (
+                    <div className="preview-main-image" style={{textAlign: 'center', marginBottom: '15px'}}>
+                      <img src={previewItem.imageSrc} alt={previewItem.title} style={{maxWidth: '100%', maxHeight: '300px', borderRadius: '8px'}} />
+                    </div>
+                  )}
                   {previewItem.isImage && previewItem.isGrouped && previewItem.elements?.length > 0 ? (
                     <div className="preview-gallery">
-                      <h4>🖼️ Images ({previewItem.elements.length})</h4>
+                      <h4><span className="material-icons" style={{verticalAlign: 'middle', marginRight: '8px'}}>image</span> Images ({previewItem.elements.length})</h4>
                       <div className="gallery-grid">
                         {previewItem.elements.slice(0, 12).map((img, idx) => (
                           <div key={idx} className="gallery-item">
@@ -1364,11 +1544,18 @@ function Results() {
                     /* Liste de contenus groupés */
                     <div className="preview-list-container">
                       <ul className="preview-list">
-                        {previewItem.elements.slice(0, 30).map((el, idx) => (
-                          <li key={idx} className="preview-list-item">
-                            {typeof el === 'string' ? el : (el.title || el.src || JSON.stringify(el))}
-                          </li>
-                        ))}
+                        {previewItem.elements.slice(0, 30).map((el, idx) => {
+                          // Gestion des éléments groupés qui peuvent être des objets {text, context, html}
+                          const text = typeof el === 'string' ? el : (el.text || el.title || el.src || JSON.stringify(el));
+                          const context = typeof el === 'object' && el.context ? el.context : '';
+                          
+                          return (
+                            <li key={idx} className="preview-list-item">
+                              <div className="preview-list-content">{text}</div>
+                              {context && <div className="preview-list-context" style={{fontSize: '0.8em', color: '#666', marginTop: '4px'}}>{context}</div>}
+                            </li>
+                          );
+                        })}
                       </ul>
                       {previewItem.elements.length > 30 && (
                         <p className="preview-more">+ {previewItem.elements.length - 30} autres éléments</p>
@@ -1383,7 +1570,7 @@ function Results() {
 
                 {/* Données brutes */}
                 <details className="preview-raw-data">
-                  <summary>📋 Données brutes (JSON)</summary>
+                  <summary><span className="material-icons" style={{verticalAlign: 'middle', marginRight: '4px'}}>data_object</span> Données brutes (JSON)</summary>
                   <pre>{JSON.stringify(previewItem.rawData, null, 2)}</pre>
                 </details>
               </div>
@@ -1393,11 +1580,11 @@ function Results() {
                   navigator.clipboard.writeText(previewItem.content || previewItem.preview || '');
                   alert('Copié dans le presse-papier !');
                 }}>
-                  📋 Copier le contenu
+                  <span className="material-icons">content_copy</span> Copier le contenu
                 </button>
                 {(previewItem.url && previewItem.url !== '-') && (
                   <a href={previewItem.url} target="_blank" rel="noopener noreferrer" className="preview-action-btn">
-                    🔗 Ouvrir le lien
+                    <span className="material-icons">open_in_new</span> Ouvrir le lien
                   </a>
                 )}
               </div>
@@ -1410,8 +1597,8 @@ function Results() {
           <div className="preview-modal-overlay" onClick={() => setShowExportPrompt(false)}>
             <div className="export-prompt-modal" onClick={e => e.stopPropagation()}>
               <div className="export-prompt-header">
-                <h3>📦 Export des résultats</h3>
-                <button className="preview-close-btn" onClick={() => setShowExportPrompt(false)}>×</button>
+                <h3><span className="material-icons" style={{verticalAlign: 'middle', marginRight: '8px'}}>archive</span> Export des résultats</h3>
+                <button className="preview-close-btn" onClick={() => setShowExportPrompt(false)}><span className="material-icons">close</span></button>
               </div>
               <div className="export-prompt-body">
                 <p>
@@ -1427,13 +1614,13 @@ function Results() {
                     setShowExportPrompt(false);
                   }}
                 >
-                  ✅ Exporter en {preSelectedFormat.toUpperCase()}
+                  <span className="material-icons">check_circle</span> Exporter en {preSelectedFormat.toUpperCase()}
                 </button>
                 <button 
                   className="export-prompt-btn secondary"
                   onClick={() => setShowExportPrompt(false)}
                 >
-                  ❌ Plus tard
+                  <span className="material-icons">cancel</span> Plus tard
                 </button>
               </div>
             </div>
@@ -1453,9 +1640,9 @@ function Results() {
             }}>
               <div className="export-prompt-header">
                 <h3 style={{ color: '#FF4D00', marginBottom: '0.5rem' }}>
-                  📦 Configuration de l'export {exportModalFormat.toUpperCase()}
+                  <span className="material-icons" style={{verticalAlign: 'middle', marginRight: '8px'}}>archive</span> Configuration de l'export {exportModalFormat.toUpperCase()}
                 </h3>
-                <button className="preview-close-btn" onClick={() => setShowExportModal(false)}>×</button>
+                <button className="preview-close-btn" onClick={() => setShowExportModal(false)}><span className="material-icons">close</span></button>
               </div>
               
               <div style={{ marginTop: '1.5rem', color: '#A0A0B0' }}>
@@ -1530,7 +1717,7 @@ function Results() {
                   marginBottom: '1.5rem'
                 }}>
                   <p style={{ margin: 0, fontSize: '0.9rem' }}>
-                    📊 {exportSelectedOnly && selectedItems.size > 0 
+                    <span className="material-icons" style={{verticalAlign: 'middle', marginRight: '4px'}}>analytics</span> {exportSelectedOnly && selectedItems.size > 0 
                       ? `${selectedItems.size} élément${selectedItems.size > 1 ? 's' : ''} sélectionné${selectedItems.size > 1 ? 's' : ''}`
                       : `${exportLimit} premier${exportLimit > 1 ? 's' : ''} élément${exportLimit > 1 ? 's' : ''}`
                     } sera{(exportSelectedOnly ? selectedItems.size : exportLimit) > 1 ? 'ont' : ''} exporté{(exportSelectedOnly ? selectedItems.size : exportLimit) > 1 ? 's' : ''}.
@@ -1551,10 +1738,14 @@ function Results() {
                     color: 'white',
                     fontWeight: '600',
                     cursor: 'pointer',
-                    transition: 'all 0.2s'
+                    transition: 'all 0.2s',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px'
                   }}
                 >
-                  ✅ Exporter
+                  <span className="material-icons">check_circle</span> Exporter
                 </button>
                 <button 
                   className="export-prompt-btn secondary"
@@ -1567,10 +1758,14 @@ function Results() {
                     borderRadius: '8px',
                     color: '#A0A0B0',
                     cursor: 'pointer',
-                    transition: 'all 0.2s'
+                    transition: 'all 0.2s',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px'
                   }}
                 >
-                  ❌ Annuler
+                  <span className="material-icons">cancel</span> Annuler
                 </button>
               </div>
             </div>

@@ -204,11 +204,17 @@ class AIStructureValidator:
         
         # 4. Vérifier la longueur du texte
         total_text_length = len(text_content)
-        if total_text_length >= pattern['min_text_length'] * detected_count:
+        
+        # Gérer le cas où detected_count est 'N/A' (détection IA sans count)
+        count_val = detected_count
+        if isinstance(count_val, str) or count_val is None:
+            count_val = 1
+            
+        if total_text_length >= pattern['min_text_length'] * count_val:
             score += 0.2
             evidence.append(f"Longueur de texte suffisante: {total_text_length} caractères")
         else:
-            warnings.append(f"Texte court pour {detected_count} éléments")
+            warnings.append(f"Texte court pour {count_val} éléments")
         
         # Décision finale
         is_valid = score >= 0.4  # Seuil de validation

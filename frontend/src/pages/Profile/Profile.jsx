@@ -123,6 +123,12 @@ const Profile = () => {
         try {
             const result = await api.uploadAvatar(file);
             setAvatarUrl(result.avatar_url);
+            
+            // Mettre à jour le contexte d'authentification
+            if (updateUser) {
+                updateUser({ avatar: result.avatar_url });
+            }
+
             setMessage({ type: 'success', text: 'Photo de profil mise à jour!' });
             setTimeout(() => setMessage({ type: '', text: '' }), 3000);
         } catch (error) {
@@ -143,6 +149,12 @@ const Profile = () => {
         try {
             await api.deleteAvatar();
             setAvatarUrl(null);
+            
+            // Mettre à jour le contexte d'authentification
+            if (updateUser) {
+                updateUser({ avatar: null });
+            }
+
             setMessage({ type: 'success', text: 'Photo de profil supprimée' });
             setTimeout(() => setMessage({ type: '', text: '' }), 3000);
         } catch (error) {

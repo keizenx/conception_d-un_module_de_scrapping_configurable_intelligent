@@ -16,6 +16,22 @@ class ContentDetector:
     
     # Définition de tous les types de contenus détectables
     CONTENT_TYPES = {
+        'vehicles': {
+            'name': 'Véhicules & Auto',
+            'icon': 'directions_car',
+            'selectors': ['.vehicle', '.car', '[itemtype*="Vehicle"]', '[itemtype*="Car"]', '.model', '.trim', '.inventory-item'],
+            'required_elements': ['model'],
+            'optional_elements': ['price', 'range', 'acceleration', 'speed', 'specs', 'features'],
+            'description': 'Voitures, spécifications, modèles'
+        },
+        'tech_specs': {
+            'name': 'Spécifications Techniques',
+            'icon': 'memory',
+            'selectors': ['.specs', '.specifications', '.features', '.tech-specs', '.parameters'],
+            'required_elements': ['specs'],
+            'optional_elements': ['dimensions', 'weight', 'performance', 'battery', 'display'],
+            'description': 'Caractéristiques techniques détaillées'
+        },
         'articles': {
             'name': 'Articles de Blog/News',
             'icon': 'article',
@@ -27,9 +43,9 @@ class ContentDetector:
         'products': {
             'name': 'Produits E-commerce',
             'icon': 'shopping_bag',
-            'selectors': ['.product', '.item', '[itemtype*="Product"]', '.product-card', '.product-item'],
-            'required_elements': ['name', 'price'],
-            'optional_elements': ['description', 'image', 'sku', 'rating', 'reviews', 'stock'],
+            'selectors': ['.product', '.item', '[itemtype*="Product"]', '.product-card', '.product-item', '.card', '.listing-item'],
+            'required_elements': ['price'], # Nom souvent implicite ou dans un lien, prix est le marqueur fort
+            'optional_elements': ['description', 'image', 'sku', 'rating', 'reviews', 'stock', 'name'],
             'description': 'Produits avec prix, descriptions, images'
         },
         'comments': {
@@ -263,7 +279,12 @@ class ContentDetector:
         sample = {}
         
         # Extraction basée sur le type
-        if content_type == 'articles':
+        if content_type == 'vehicles':
+            sample['model'] = self._get_text(element, ['.model', '.name', 'h1', 'h2'])
+            sample['specs'] = self._get_text(element, ['.specs', '.features', '.range', '.acceleration'])
+        elif content_type == 'tech_specs':
+            sample['specs'] = self._get_text(element, ['.value', '.data', 'td', 'li'])
+        elif content_type == 'articles':
             sample['title'] = self._get_text(element, ['h1', 'h2', 'h3', '.title', '.headline'])
             sample['text'] = element.get_text(strip=True)[:200] + '...'
         elif content_type == 'products':
@@ -299,8 +320,17 @@ class ContentDetector:
             # Chercher des indices de ce champ dans les éléments
             found = False
             for elem in elements[:5]:  # Vérifier les 5 premiers
-                text = elem.get_text().lower()
-                if field in text or any(f'[{field}]' in str(elem) for field in [field]):
+                # Conversion en string pour chercher dans les attributs (class, id, etc)
+                elem_str = str(elem).lower()
+                elem_text = elem.get_text().lower()
+                
+                # Recherche plus large : dans le texte, les classes, les attributs
+                if (field in elem_text) or \
+                   (f'{field}' in elem_str) or \
+                   (field == 'price' and any(curr in elem_text for curr in ['€', '$', '£', 'fcfa', 'xof'])) or \
+                   (field == 'image' and elem.find('img')) or \
+                   (field == 'model' and any(kw in elem_text for kw in ['model', 'modèle', 'série', 'edition'])) or \
+                   (field == 'specs' and any(kw in elem_text for kw in ['km/h', 'mph', '0-60', 'autonomie', 'range', 'battery', 'wh'])):
                     found = True
                     break
             

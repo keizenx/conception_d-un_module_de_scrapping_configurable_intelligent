@@ -116,7 +116,7 @@ const Landing = () => {
       <section className="hero">
         <div className="hero-content">
           <div className="hero-badge">
-            <span>⚡</span>
+            <span className="material-icons">bolt</span>
             <span>Propulsé par Django & React</span>
           </div>
           <h1>
@@ -143,7 +143,8 @@ const Landing = () => {
                 disabled={isAnalyzing}
                 className="btn-analyze"
               >
-                {isAnalyzing ? '⏳ Analyse...' : '🚀 Analyser'}
+                <span className="material-icons" style={{ marginRight: '8px' }}>{isAnalyzing ? 'hourglass_empty' : 'rocket_launch'}</span>
+                {isAnalyzing ? 'Analyse...' : 'Analyser'}
               </button>
             </div>
             
@@ -152,15 +153,15 @@ const Landing = () => {
               <div className="quick-results">
                 <div className="result-stats">
                   <div className="stat-item">
-                    <span className="stat-icon">📄</span>
+                    <span className="material-icons stat-icon">description</span>
                     <span className="stat-label">{analysisResult.page_count || 0} pages</span>
                   </div>
                   <div className="stat-item">
-                    <span className="stat-icon">🌐</span>
+                    <span className="material-icons stat-icon">language</span>
                     <span className="stat-label">{analysisResult.subdomains?.total_found || 0} sous-domaines</span>
                   </div>
                   <div className="stat-item">
-                    <span className="stat-icon">📦</span>
+                    <span className="material-icons stat-icon">inventory_2</span>
                     <span className="stat-label">{analysisResult.content_types_count || 0} types de contenu</span>
                   </div>
                 </div>
@@ -168,7 +169,7 @@ const Landing = () => {
                 {showLoginPrompt && (
                   <div className="login-prompt">
                     <div className="prompt-content">
-                      <span className="prompt-icon">🔒</span>
+                      <span className="material-icons prompt-icon">lock</span>
                       <p>Connectez-vous pour accéder à l'analyse complète et lancer le scraping</p>
                       <div className="prompt-buttons">
                         <Link to="/login" className="btn-prompt-login">Se connecter</Link>
@@ -196,25 +197,25 @@ const Landing = () => {
       <section className="features-grid" id="services">
 
         <div className="feature-card">
-          <div className="feature-icon">🧭</div>
+          <div className="feature-icon"><span className="material-icons" style={{ fontSize: '2rem' }}>explore</span></div>
           <h3>Navigation</h3>
           <p>Parcours intelligent des pages</p>
         </div>
 
         <div className="feature-card">
-          <div className="feature-icon">🔄</div>
+          <div className="feature-icon"><span className="material-icons" style={{ fontSize: '2rem' }}>sync</span></div>
           <h3>Actions multi-pages</h3>
           <p>Workflows complexes simplifiés</p>
         </div>
 
         <div className="feature-card">
-          <div className="feature-icon">📊</div>
+          <div className="feature-icon"><span className="material-icons" style={{ fontSize: '2rem' }}>analytics</span></div>
           <h3>Extraction de données</h3>
           <p>Collecte structurée et précise</p>
         </div>
 
         <div className="feature-card">
-          <div className="feature-icon">🤖</div>
+          <div className="feature-icon"><span className="material-icons" style={{ fontSize: '2rem' }}>smart_toy</span></div>
           <h3>Automatisation intelligente</h3>
           <p>Scripts adaptatifs et évolutifs</p>
         </div>
@@ -274,7 +275,10 @@ const Landing = () => {
       {/* Footer */}
       <footer id="equipe">
         <div className="footer-content">
-          <div className="footer-logo">⚡ SCRAPER PRO</div>
+          <div className="footer-logo">
+            <span className="material-icons" style={{ verticalAlign: 'middle', marginRight: '8px' }}>bolt</span>
+            SCRAPER PRO
+          </div>
           <p className="footer-text">
             Solution d'automatisation web professionnelle
           </p>

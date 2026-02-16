@@ -21,6 +21,7 @@ export default function Analysis() {
     addNotification,
     activeTasks,
     getCompletedAnalysis,
+    cancelTask,
   } = useScraping();
   
   // State management
@@ -30,10 +31,14 @@ export default function Analysis() {
   const [screenshot, setScreenshot] = useState(null);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [includeSubdomains, setIncludeSubdomains] = useState(false);
+  const [analysisMaxPages, setAnalysisMaxPages] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isEstimating, setIsEstimating] = useState(false);
+  const [estimation, setEstimation] = useState(null);
   const [showResults, setShowResults] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
   const [sessionId, setSessionId] = useState(null);
+  const [currentTaskId, setCurrentTaskId] = useState(null);
   
   // Analysis results
   const [siteInfo, setSiteInfo] = useState({
@@ -82,16 +87,17 @@ export default function Analysis() {
   // Selected pages from analysis
   const [selectedPages, setSelectedPages] = useState(new Set());
   const [activePreviewPage, setActivePreviewPage] = useState(null);
+  const [pageScreenshots, setPageScreenshots] = useState({}); // Cache pour les screenshots
 
   // Storage format
   const [selectedFormat, setSelectedFormat] = useState('json');
   const [includeImagesZip, setIncludeImagesZip] = useState(false);
   const formats = [
-    { id: 'json', icon: '🔧', name: 'JSON' },
-    { id: 'csv', icon: '📄', name: 'CSV' },
-    { id: 'excel', icon: '📊', name: 'Excel' },
-    { id: 'pdf', icon: '📕', name: 'PDF' },
-    { id: 'xml', icon: '📋', name: 'XML' }
+    { id: 'json', icon: 'data_object', name: 'JSON' },
+    { id: 'csv', icon: 'table_chart', name: 'CSV' },
+    { id: 'excel', icon: 'grid_on', name: 'Excel' },
+    { id: 'pdf', icon: 'picture_as_pdf', name: 'PDF' },
+    { id: 'xml', icon: 'code', name: 'XML' }
   ];
   
   // Output formats (like Firecrawl)
@@ -126,7 +132,28 @@ export default function Analysis() {
       setUrl(completedTask.url);
       setSessionId(completedTask.sessionId);
     }
-  }, [activeTasks]);
+
+    // Chercher une tâche en cours
+    const runningTask = activeTasks.find(t => 
+        t.type === 'analysis' && 
+        (t.status === 'running' || t.status === 'polling')
+    );
+
+    if (runningTask && !isAnalyzing) {
+        setIsAnalyzing(true);
+        setUrl(runningTask.url);
+        setSessionId(runningTask.sessionId);
+        setCurrentTaskId(runningTask.id);
+        setCurrentStep(2);
+    }
+    
+    // Si la tâche en cours disparait (annulée ou erreur), on arrête le loading
+    if (isAnalyzing && currentTaskId && !activeTasks.find(t => t.id === currentTaskId)) {
+        setIsAnalyzing(false);
+        setCurrentStep(1);
+        setCurrentTaskId(null);
+    }
+  }, [activeTasks, isAnalyzing, currentTaskId]);
   
   // Normalize URL (add https:// if missing)
   const normalizeUrl = (urlString) => {
@@ -189,11 +216,11 @@ export default function Analysis() {
      
      // Default content types for batch mode
      const defaultTypes = [
-       { id: 'text_content', icon: '📝', title: 'Texte', description: 'Contenu textuel principal', count: 'Auto' },
-       { id: 'media', icon: '🖼️', title: 'Médias', description: 'Images et vidéos', count: 'Auto' },
-       { id: 'links', icon: '🔗', title: 'Liens', description: 'Tous les liens', count: 'Auto' },
-       { id: 'tables', icon: '📊', title: 'Tableaux', description: 'Tableaux de données', count: 'Auto' },
-       { id: 'metadata', icon: '📋', title: 'Métadonnées', description: 'Titre, description, mots-clés', count: 'Auto' },
+       { id: 'text_content', icon: 'description', title: 'Texte', description: 'Contenu textuel principal', count: 'Auto' },
+       { id: 'media', icon: 'image', title: 'Médias', description: 'Images et vidéos', count: 'Auto' },
+       { id: 'links', icon: 'link', title: 'Liens', description: 'Tous les liens', count: 'Auto' },
+       { id: 'tables', icon: 'table_chart', title: 'Tableaux', description: 'Tableaux de données', count: 'Auto' },
+       { id: 'metadata', icon: 'info', title: 'Métadonnées', description: 'Titre, description, mots-clés', count: 'Auto' },
      ];
      setContentTypes(defaultTypes);
      // Pre-select text and media
@@ -204,6 +231,53 @@ export default function Analysis() {
      setShowResults(true); 
    };
   
+  // Reset estimation and results when URL changes
+  useEffect(() => {
+    if (estimation) {
+        setEstimation(null);
+    }
+    // Si on change l'URL, on peut aussi vouloir cacher les résultats précédents si on était à l'étape 1
+    if (currentStep === 1 && showResults) {
+        setShowResults(false);
+    }
+  }, [url]);
+
+  // Handle Estimation
+  const handleEstimate = async () => {
+    if (!url) return;
+    const normalizedUrl = normalizeUrl(url);
+    if (!isValidUrl(normalizedUrl)) return;
+    
+    setIsEstimating(true);
+    setEstimation(null);
+    
+    try {
+        const result = await api.estimatePages(normalizedUrl);
+        if (result.success) {
+            setEstimation(result);
+            // Pre-fill max pages with recommendation if empty
+            if (!analysisMaxPages) {
+                setAnalysisMaxPages(result.recommended_max.toString());
+            }
+        } else {
+             throw new Error("Estimation failed");
+        }
+    } catch (error) {
+        console.error("Erreur estimation:", error);
+        // Fallback to allow user to proceed manually
+        setEstimation({
+            estimated_pages: 'Inconnu',
+            confidence: 'low',
+            recommended_max: 10
+        });
+        if (!analysisMaxPages) {
+            setAnalysisMaxPages("10");
+        }
+    } finally {
+        setIsEstimating(false);
+    }
+  };
+
   // Handle URL analysis - Mode ASYNCHRONE
   const handleAnalyze = async () => {
     if (!url) {
@@ -211,7 +285,6 @@ export default function Analysis() {
       return;
     }
     
-    // Normaliser l'URL (ajouter https:// si nécessaire)
     const normalizedUrl = normalizeUrl(url);
     setUrl(normalizedUrl);
     
@@ -219,13 +292,34 @@ export default function Analysis() {
       alert('Veuillez entrer une URL valide');
       return;
     }
+
+    // STEP 1: ESTIMATION (if not done yet)
+    if (!estimation && !isEstimating) {
+        await handleEstimate();
+        return; // Stop here, user must confirm next step
+    }
+    
+    // Si une estimation est en cours, on attend
+    if (isEstimating) {
+        return;
+    }
+    
+    // Clear previous results
+    setShowResults(false);
+    setSiteInfo({ domain: '', pageCount: 0, contentTypesCount: 0 });
+    setSubdomains({ scrapable: [], nonScrapable: [], total: 0 });
+    setPaths({ discovered: [], total: 0, sources: [] });
+    setContentTypes([]);
+    setScrapableContent(null);
+    setSelectedTypes([]);
+    setSelectedScrapableTypes([]);
     
     setIsAnalyzing(true);
     setCurrentStep(2);
     
     try {
       // Lancer l'analyse en arrière-plan via le contexte
-      const result = await startAnalysisTask(normalizedUrl, includeSubdomains, (completionResult) => {
+      const result = await startAnalysisTask(normalizedUrl, includeSubdomains, parseInt(analysisMaxPages) || 10, (completionResult) => {
         // Callback appelé quand l'analyse est terminée
         if (completionResult.success) {
           console.log('Analyse terminée avec succès:', completionResult.results);
@@ -241,6 +335,7 @@ export default function Analysis() {
       // Enregistrer le session_id
       if (result.sessionId) {
         setSessionId(result.sessionId);
+        setCurrentTaskId(result.taskId);
         
         // Mettre à jour les infos du site
         const domain = new URL(normalizedUrl).hostname;
@@ -297,6 +392,15 @@ export default function Analysis() {
     // Mettre à jour les types de contenu
     if (results.content_types && results.content_types.length > 0) {
       setContentTypes(results.content_types);
+      
+      // Auto-sélectionner les types détectés pertinents (count > 0 ou AI generated)
+      const typesToSelect = results.content_types
+        .filter(t => t.count > 0 || t.count === 'N/A' || t.ai_generated)
+        .map(t => t.id || t.type);
+        
+      if (typesToSelect.length > 0) {
+        setSelectedTypes(typesToSelect);
+      }
     }
     
     // Mettre à jour les contenus scrapables détectés
@@ -350,9 +454,11 @@ export default function Analysis() {
       
       // Auto-select first page for preview
        if (allPages.length > 0) {
-         setActivePreviewPage(allPages[0]);
+         const page = typeof allPages[0] === 'string' ? { url: allPages[0], title: allPages[0], preview: null } : allPages[0];
+         setActivePreviewPage(page);
        } else if (mainPages.length > 0) {
-         setActivePreviewPage(mainPages[0]);
+         const page = typeof mainPages[0] === 'string' ? { url: mainPages[0], title: mainPages[0], preview: null } : mainPages[0];
+         setActivePreviewPage(page);
        } else if (discoveredPaths.length > 0) {
           setActivePreviewPage({ url: discoveredPaths[0], title: discoveredPaths[0], preview: null });
        } else {
@@ -364,6 +470,19 @@ export default function Analysis() {
     setShowResults(true);
     setCurrentStep(3);
     setIsAnalyzing(false);
+  };
+
+  const handleCancel = () => {
+    if (currentTaskId) {
+        cancelTask(currentTaskId);
+        // Le useEffect s'occupera de resetter l'état quand la tâche disparaitra
+        // Mais on peut aussi forcer le reset immédiat pour une meilleure UX
+        setIsAnalyzing(false);
+        setCurrentStep(1);
+        setSessionId(null);
+        setCurrentTaskId(null);
+        addNotification({ type: 'info', title: 'Analyse annulée', message: 'L\'analyse a été arrêtée.' });
+    }
   };
 
   const handlePreview = async () => {
@@ -382,10 +501,10 @@ export default function Analysis() {
     
     try {
       const response = await api.post('/analysis/preview/', { url: normalizedUrl });
-      if (response.data.screenshot) {
-        setScreenshot(response.data.screenshot);
+      if (response.screenshot) {
+        setScreenshot(response.screenshot);
       } else {
-        throw new Error(response.data.error || 'La capture d\'écran n\'a pas pu être générée.');
+        throw new Error(response.error || 'La capture d\'écran n\'a pas pu être générée.');
       }
     } catch (error) {
       console.error('Erreur lors de la prévisualisation:', error);
@@ -395,6 +514,45 @@ export default function Analysis() {
     }
   };
 
+  // Charger le screenshot d'une page spécifique
+  const loadPageScreenshot = async (pageUrl) => {
+    if (!pageUrl) return;
+    
+    // Si déjà chargé, ne rien faire
+    if (pageScreenshots[pageUrl]) return;
+    
+    setIsPreviewLoading(true);
+    try {
+      const response = await api.post('/analysis/preview/', { url: pageUrl });
+      
+      if (response.screenshot) {
+        const screenshotBase64 = `data:image/png;base64,${response.screenshot}`;
+        setPageScreenshots(prev => ({
+          ...prev,
+          [pageUrl]: screenshotBase64
+        }));
+      } else {
+        throw new Error("Pas de screenshot retourné");
+      }
+    } catch (error) {
+      console.error("Failed to load screenshot", error);
+      // Ne pas afficher de notification d'erreur pour ne pas spammer l'utilisateur
+      // addNotification({ type: 'error', title: 'Erreur', message: 'Impossible de charger l\'aperçu.' });
+    } finally {
+      setIsPreviewLoading(false);
+    }
+  };
+
+  // Auto-load screenshot when activePreviewPage changes
+  useEffect(() => {
+    if (activePreviewPage?.url && !pageScreenshots[activePreviewPage.url]) {
+        // Petit délai pour éviter de spammer si l'utilisateur navigue très vite
+        const timer = setTimeout(() => {
+            loadPageScreenshot(activePreviewPage.url);
+        }, 500);
+        return () => clearTimeout(timer);
+    }
+  }, [activePreviewPage]);
   
   // Toggle content type selection
   const toggleContentType = (typeId) => {
@@ -446,7 +604,10 @@ export default function Analysis() {
 
   // Start scraping
   const handleStartScraping = async () => {
-    if (selectedTypes.length === 0) {
+    // Merge selected types from both lists (technical and smart)
+    const allSelectedTypes = [...new Set([...selectedTypes, ...selectedScrapableTypes])];
+    
+    if (allSelectedTypes.length === 0) {
       alert('Veuillez sélectionner au moins un type de contenu à extraire');
       return;
     }
@@ -455,17 +616,19 @@ export default function Analysis() {
       setCurrentStep(4);
       
       // Préparer la configuration du scraping
+      // NOTE: Les clés doivent correspondre à ce que api.js attend (camelCase pour certains, format spécifique pour d'autres)
       const config = {
         url: url,
         include_subdomains: includeSubdomains,
-        content_types: selectedTypes,
+        selectedTypes: allSelectedTypes, // api.js attend selectedTypes
         depth: parseInt(advancedOptions.depth) || 2,
         delay: parseInt(advancedOptions.delay) || 500,
-        user_agent: advancedOptions.userAgent,
+        userAgent: advancedOptions.userAgent, // api.js attend userAgent
         timeout: parseInt(advancedOptions.timeout) || 30,
+        // max_pages n'est pas encore supporté par api.js startScraping mais on le passe au cas où
         max_pages: advancedOptions.max_pages ? parseInt(advancedOptions.max_pages) : null,
-        custom_selectors: customSelectors.filter(s => s.name && s.selector),
-        output_format: selectedFormat,
+        customSelectors: customSelectors.filter(s => s.name && s.selector), // api.js attend customSelectors
+        format: selectedFormat, // api.js attend format (pas output_format)
         include_images_zip: includeImagesZip
       };
       
@@ -492,7 +655,7 @@ export default function Analysis() {
         // Rediriger vers le dashboard ou rester ici
         addNotification({
           type: 'info',
-          title: '🚀 Scraping par lot lancé !',
+          title: 'Scraping par lot lancé !',
           message: `Vous pouvez naviguer librement. Session #${result.sessionId}`,
           sessionId: result.sessionId,
         });
@@ -520,7 +683,7 @@ export default function Analysis() {
          
          addNotification({
            type: 'info',
-           title: '🚀 Scraping sélectif lancé !',
+           title: 'Scraping sélectif lancé !',
            message: `Extraction de ${urls.length} pages sélectionnées. Session #${result.sessionId}`,
            sessionId: result.sessionId,
          });
@@ -543,7 +706,7 @@ export default function Analysis() {
       // Rediriger vers le dashboard ou rester ici - l'utilisateur peut naviguer librement
       addNotification({
         type: 'info',
-        title: '🚀 Scraping lancé !',
+        title: 'Scraping lancé !',
         message: `Vous pouvez naviguer librement. Session #${result.sessionId}`,
         sessionId: result.sessionId,
       });
@@ -575,15 +738,15 @@ export default function Analysis() {
         <h2 className="analysis-internal-title">NOUVELLE ANALYSE</h2>
         <div className="step-indicator-vertical">
           <div className={`step ${currentStep >= 1 ? 'active' : ''} ${currentStep > 1 ? 'completed' : ''}`}>
-            <div className="step-number">{currentStep > 1 ? '✓' : '1'}</div>
+            <div className="step-number">{currentStep > 1 ? <span className="material-icons" style={{fontSize: '1.2rem'}}>check</span> : '1'}</div>
             <div className="step-label">URL du site</div>
           </div>
           <div className={`step ${currentStep >= 2 ? 'active' : ''} ${currentStep > 2 ? 'completed' : ''}`}>
-            <div className="step-number">{currentStep > 2 ? '✓' : '2'}</div>
+            <div className="step-number">{currentStep > 2 ? <span className="material-icons" style={{fontSize: '1.2rem'}}>check</span> : '2'}</div>
             <div className="step-label">Analyse auto</div>
           </div>
           <div className={`step ${currentStep >= 3 ? 'active' : ''} ${currentStep > 3 ? 'completed' : ''}`}>
-            <div className="step-number">{currentStep > 3 ? '✓' : '3'}</div>
+            <div className="step-number">{currentStep > 3 ? <span className="material-icons" style={{fontSize: '1.2rem'}}>check</span> : '3'}</div>
             <div className="step-label">Sélection</div>
           </div>
           <div className={`step ${currentStep >= 4 ? 'active' : ''}`}>
@@ -633,14 +796,78 @@ export default function Analysis() {
                   </div>
                 </div>
                 
+                {/* Estimation Section - Only show if URL is entered */}
+                {url && isValidUrl(normalizeUrl(url)) && (
+                    <div style={{ marginTop: '1.5rem', minHeight: '80px', transition: 'all 0.3s ease' }}>
+                         
+                         {/* Loading State */}
+                         {isEstimating && (
+                             <div style={{ 
+                                 padding: '1.5rem', 
+                                 background: 'var(--bg-secondary)', 
+                                 borderRadius: '8px', 
+                                 border: '1px solid var(--border-color)',
+                                 display: 'flex', 
+                                 alignItems: 'center', 
+                                 justifyContent: 'center', 
+                                 gap: '15px' 
+                             }}>
+                                 <div className="spinner" style={{ width: '24px', height: '24px', borderWidth: '2px' }}></div>
+                                 <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                     <span className="text-muted" style={{ fontWeight: '500' }}>Estimation de la taille du site en cours...</span>
+                                     <span className="text-muted" style={{ fontSize: '0.85rem', opacity: 0.8 }}>Veuillez patienter le temps d'estimer les pages, cela peut prendre quelques minutes.</span>
+                                 </div>
+                             </div>
+                         )}
+                         
+                         {/* Result State - Only show AFTER estimation is done */}
+                         {!isEstimating && estimation && (
+                            <div style={{ padding: '1rem', background: 'var(--bg-secondary)', borderRadius: '8px', border: '1px solid var(--border-color)', animation: 'fadeIn 0.5s' }}>
+                                <div className="form-group" style={{ marginBottom: 0 }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                                    <label htmlFor="maxPagesInput" className="form-label" style={{ fontSize: '0.9rem', marginBottom: 0 }}>
+                                      Combien de pages souhaitez-vous analyser ?
+                                    </label>
+                                    
+                                    <span className="text-muted" style={{ fontSize: '0.8rem', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                        <span className="material-icons" style={{ fontSize: '14px' }}>info</span>
+                                        ~{estimation.estimated_pages} pages détectées 
+                                        <span style={{ opacity: 0.7, fontSize: '0.75rem' }}>({estimation.method || 'auto'})</span>
+                                    </span>
+                                  </div>
+                                  
+                                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                                      <input
+                                        type="number"
+                                        id="maxPagesInput"
+                                        className="form-control"
+                                        value={analysisMaxPages}
+                                        onChange={(e) => setAnalysisMaxPages(e.target.value)}
+                                        placeholder={estimation.recommended_max.toString()}
+                                        min="1"
+                                      />
+                                      <span className="text-muted" style={{ fontSize: '0.85rem', whiteSpace: 'nowrap' }}>
+                                          (Recommandé: {estimation.recommended_max})
+                                      </span>
+                                  </div>
+                                </div>
+                            </div>
+                         )}
+                    </div>
+                )}
+                
+                {/* Previous static input removed */}
+
                 <div className="form-actions">
                   <button
                     className="btn btn-primary"
                     onClick={handleAnalyze}
-                    disabled={isAnalyzing}
+                    disabled={isAnalyzing || isEstimating}
                   >
-                    <span className="material-icons">{isAnalyzing ? 'hourglass_empty' : 'rocket_launch'}</span>
-                    {isAnalyzing ? 'Analyse en cours...' : 'Analyser le site'}
+                    <span className="material-icons">
+                        {isAnalyzing ? 'hourglass_empty' : (isEstimating ? 'query_stats' : (estimation ? 'rocket_launch' : 'search'))}
+                    </span>
+                    {isAnalyzing ? 'Analyse en cours...' : (isEstimating ? 'Estimation...' : (estimation ? 'Lancer l\'analyse' : 'Analyser le site'))}
                   </button>
                 </div>
               </div>
@@ -654,12 +881,29 @@ export default function Analysis() {
                     L'analyse se poursuit en arrière-plan. Vous pouvez naviguer librement, 
                     une notification vous préviendra quand c'est terminé.
                   </p>
-                  <button 
-                    className="btn btn-secondary"
-                    onClick={() => navigate('/dashboard')}
-                  >
-                    Aller au Dashboard
-                  </button>
+                  <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', marginTop: '1rem' }}>
+                    <button 
+                        className="btn btn-secondary"
+                        onClick={() => navigate('/dashboard')}
+                    >
+                        Aller au Dashboard
+                    </button>
+                    <button 
+                        className="btn btn-outline-danger"
+                        onClick={handleCancel}
+                        style={{ 
+                            borderColor: 'var(--error)', 
+                            color: 'var(--error)',
+                            background: 'transparent',
+                            border: '1px solid var(--error)',
+                            padding: '0.5rem 1rem',
+                            borderRadius: '4px',
+                            cursor: 'pointer'
+                        }}
+                    >
+                        Annuler
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -672,7 +916,7 @@ export default function Analysis() {
             <div className="card">
               <div className="card-header">
                 <h2 className="card-title">
-                  <span>✨</span>
+                  <span className="material-icons" style={{ color: 'var(--primary)' }}>auto_awesome</span>
                   Analyse terminée !
                 </h2>
                 <p className="card-description">
@@ -725,7 +969,7 @@ export default function Analysis() {
               {!isBatchMode && includeSubdomains && subdomains.total > 0 && (
                 <div className="subdomains-section">
                   <h3 className="section-title">
-                    <span>🌐</span>
+                    <span className="material-icons">public</span>
                     Sous-domaines découverts ({subdomains.total})
                   </h3>
                   
@@ -733,14 +977,14 @@ export default function Analysis() {
                   {subdomains.scrapable.length > 0 && (
                     <div className="subdomain-group">
                       <h4 className="subdomain-group-title">
-                        <span className="status-badge success">✓</span>
+                        <span className="material-icons status-badge success">check_circle</span>
                         Scrapables ({subdomains.scrapable.length})
                       </h4>
                       <div className="subdomain-list">
                         {subdomains.scrapable.map((sub, idx) => (
                           <div key={idx} className="subdomain-item scrapable">
                             <div className="subdomain-url">
-                              <span className="subdomain-icon">✅</span>
+                              <span className="material-icons subdomain-icon" style={{color: 'var(--success)'}}>check_circle</span>
                               <span>{sub.url}</span>
                             </div>
                             <div className="subdomain-meta">
@@ -761,7 +1005,7 @@ export default function Analysis() {
                   {subdomains.nonScrapable.length > 0 && (
                     <div className="subdomain-group">
                       <h4 className="subdomain-group-title">
-                        <span className="status-badge warning">⚠</span>
+                        <span className="material-icons status-badge warning">warning</span>
                         Non-scrapables ({subdomains.nonScrapable.length})
                       </h4>
                       <div className="subdomain-list">
@@ -769,7 +1013,7 @@ export default function Analysis() {
                           <div key={idx} className="subdomain-item non-scrapable">
                             <div className="subdomain-url">
                               <span className="subdomain-icon">
-                                {sub.status >= 500 ? '❌' : '🚫'}
+                                {sub.status >= 500 ? <span className="material-icons" style={{color: 'var(--error)'}}>error</span> : <span className="material-icons" style={{color: 'var(--warning)'}}>block</span>}
                               </span>
                               <span>{sub.url}</span>
                             </div>
@@ -777,7 +1021,7 @@ export default function Analysis() {
                               <span className="status-code error">{sub.status}</span>
                               {sub.protection && (
                                 <span className="protection-badge">
-                                  🛡️ {sub.protection}
+                                  <span className="material-icons" style={{fontSize: '0.9rem', marginRight: '4px'}}>security</span> {sub.protection}
                                 </span>
                               )}
                             </div>
@@ -794,7 +1038,7 @@ export default function Analysis() {
                 <div className="paths-section">
                   <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <h3 className="section-title" style={{ margin: 0 }}>
-                      <span>📂</span>
+                      <span className="material-icons" style={{ verticalAlign: 'middle', marginRight: '8px' }}>folder_open</span>
                       Pages découvertes ({paths.total}) - {paths.pagesCrawled} pages crawlées
                     </h3>
                     <button 
@@ -836,11 +1080,11 @@ export default function Analysis() {
                   {paths.mainPages && paths.mainPages.length > 0 && (
                     <div className="main-pages-group">
                       <h4 className="subdomain-group-title">
-                        <span className="status-badge success">⭐</span>
+                        <span className="material-icons status-badge success">star</span>
                         Pages principales ({paths.mainPages.length})
                       </h4>
                       <div className="paths-list">
-                        {paths.mainPages.map((page, idx) => (
+                        {paths.mainPages.slice(0, 5).map((page, idx) => (
                           <div 
                             key={idx} 
                             className={`path-item main-page ${selectedPages.has(page.url) ? 'selected' : ''} ${activePreviewPage?.url === page.url ? 'active-preview' : ''}`}
@@ -868,7 +1112,7 @@ export default function Analysis() {
                                 style={{ transform: 'scale(1.2)', cursor: 'pointer' }}
                               />
                             </div>
-                            <span className="path-icon">🔗</span>
+                            <span className="material-icons path-icon">link</span>
                             <div className="path-details" style={{ display: 'flex', flexDirection: 'column', gap: '2px', overflow: 'hidden', flex: 1 }}>
                               <span className="path-text" style={{ fontWeight: '500', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{page.text || 'Sans titre'}</span>
                               <span className="path-url" style={{ fontSize: '0.85rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{page.url}</span>
@@ -883,11 +1127,11 @@ export default function Analysis() {
                   {paths.allPages && paths.allPages.length > 0 && (
                     <div className="all-paths-group">
                       <h4 className="subdomain-group-title">
-                        <span className="status-badge">📄</span>
+                        <span className="material-icons status-badge">description</span>
                         Toutes les pages découvertes ({paths.allPages.length})
                       </h4>
                       <div className="paths-list">
-                        {paths.allPages.map((page, idx) => (
+                        {paths.allPages.slice(0, 5).map((page, idx) => (
                           <div 
                             key={idx} 
                             className={`path-item-with-preview ${selectedPages.has(page.url) ? 'selected' : ''} ${activePreviewPage?.url === page.url ? 'active-preview' : ''}`}
@@ -924,7 +1168,7 @@ export default function Analysis() {
                               />
                             </div>
                             
-                            <span className="path-icon">📄</span>
+                            <span className="material-icons path-icon">article</span>
                             <div className="path-details" style={{ display: 'flex', flexDirection: 'column', gap: '2px', overflow: 'hidden', flex: 1 }}>
                               <span className="path-text" style={{ fontWeight: '500', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{page.title || 'Sans titre'}</span>
                               <span className="path-url" style={{ fontSize: '0.85rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -941,11 +1185,11 @@ export default function Analysis() {
                   {paths.discovered && paths.discovered.length > 0 && (
                     <div className="all-paths-group" style={{ marginTop: '2rem' }}>
                       <h4 className="subdomain-group-title" style={{ fontSize: '1rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <span className="status-badge" style={{ fontSize: '1.2rem' }}>📄</span>
+                        <span className="material-icons status-badge" style={{ fontSize: '1.2rem' }}>list_alt</span>
                         Tous les chemins ({paths.discovered.length})
                       </h4>
                       <div className="paths-list" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                        {paths.discovered.map((path, idx) => (
+                        {paths.discovered.slice(0, 5).map((path, idx) => (
                           <div 
                             key={idx} 
                             className={`path-item ${selectedPages.has(path) ? 'selected' : ''}`}
@@ -981,7 +1225,7 @@ export default function Analysis() {
                                 style={{ transform: 'scale(1.2)', cursor: 'pointer' }}
                               />
                             </div>
-                            <span className="path-icon" style={{ marginRight: '0.5rem' }}>📄</span>
+                            <span className="material-icons path-icon" style={{ marginRight: '0.5rem' }}>article</span>
                             <span className="path-url" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1, fontSize: '0.9rem' }}>{path}</span>
                           </div>
                         ))}
@@ -1006,7 +1250,7 @@ export default function Analysis() {
                       <div className="preview-header" style={{ marginBottom: '1.5rem', paddingBottom: '1rem', borderBottom: '1px solid var(--border-color)' }}>
                         <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.2rem' }}>{activePreviewPage.title || 'Sans titre'}</h3>
                         <a href={activePreviewPage.url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', textDecoration: 'none', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          {activePreviewPage.url} <span>↗</span>
+                          {activePreviewPage.url} <span className="material-icons" style={{ fontSize: '1rem' }}>open_in_new</span>
                         </a>
                       </div>
                       
@@ -1030,6 +1274,33 @@ export default function Analysis() {
                             </div>
                           )}
                           
+                          {/* Visual Preview */}
+                          <div className="preview-section" style={{ marginBottom: '2rem' }}>
+                            <h4 style={{ fontSize: '1rem', marginBottom: '1rem', color: 'var(--text-color)' }}>Aperçu du site</h4>
+                            <div style={{ background: 'var(--card-bg)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-color)', textAlign: 'center' }}>
+                              
+                              {pageScreenshots[activePreviewPage.url] ? (
+                                <img 
+                                  src={pageScreenshots[activePreviewPage.url]} 
+                                  alt="Screenshot" 
+                                  style={{ maxWidth: '100%', borderRadius: '4px', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }} 
+                                />
+                              ) : (
+                                <div style={{ padding: '2rem 1rem' }}>
+                                  {isPreviewLoading ? (
+                                    <div className="spinner" style={{ margin: '0 auto 1rem' }}></div>
+                                  ) : (
+                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
+                                      <div className="spinner" style={{ margin: '0 auto 1rem' }}></div>
+                                      <p style={{ margin: 0, color: 'var(--text-muted)' }}>Chargement de l'aperçu...</p>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                              
+                            </div>
+                          </div>
+
                           {/* Meta Info */}
                           {activePreviewPage.preview.meta && (
                             <div className="preview-section" style={{ marginBottom: '2rem' }}>
@@ -1083,14 +1354,14 @@ export default function Analysis() {
                         </div>
                       ) : (
                         <div className="empty-preview" style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--text-muted)' }}>
-                          <span style={{ fontSize: '2rem', display: 'block', marginBottom: '1rem' }}>👻</span>
+                          <span className="material-icons" style={{ fontSize: '3rem', display: 'block', marginBottom: '1rem', color: 'var(--text-muted)' }}>visibility_off</span>
                           <p>Aucune prévisualisation disponible pour cette page.</p>
                         </div>
                       )}
                     </div>
                   ) : (
                     <div className="empty-selection" style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', textAlign: 'center' }}>
-                      <div style={{ fontSize: '3rem', marginBottom: '1rem', opacity: 0.5 }}>👈</div>
+                      <span className="material-icons" style={{ fontSize: '4rem', marginBottom: '1rem', opacity: 0.5 }}>touch_app</span>
                       <h3 style={{ margin: '0 0 0.5rem 0' }}>Sélectionnez une page</h3>
                       <p style={{ margin: 0, maxWidth: '300px' }}>Cliquez sur une page dans la liste de gauche pour voir un aperçu de son contenu.</p>
                     </div>
@@ -1102,25 +1373,117 @@ export default function Analysis() {
               {/* Detected Content Types */}
               <div className="content-types-section">
                 <h3 className="section-title">
-                  <span>📦</span>
-                  {isBatchMode ? 'Types de contenu à extraire' : 'Types de contenu détectés'}
+                  <span className="material-icons" style={{ marginRight: '8px' }}>category</span>
+                  {isBatchMode ? 'Types de contenu à extraire' : 'Analyse du contenu'}
                 </h3>
                 
-                {contentTypes.length > 0 ? (
+                {/* AI Classification - REPLACES the generic list if present */}
+                {scrapableContent && scrapableContent.ai_classification ? (
+                    <div style={{
+                        padding: '1.5rem',
+                        background: 'var(--card-bg)',
+                        border: '1px solid var(--primary)',
+                        borderRadius: '8px',
+                        boxShadow: '0 4px 12px rgba(var(--primary-rgb), 0.1)'
+                    }}>
+                        <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start', marginBottom: '1rem' }}>
+                            <span className="material-icons" style={{ color: 'var(--primary)', fontSize: '2rem', background: 'rgba(var(--primary-rgb), 0.1)', padding: '0.5rem', borderRadius: '50%' }}>auto_awesome</span>
+                            <div>
+                                <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem', color: 'var(--text-color)' }}>
+                                    {scrapableContent.ai_classification.catégorie_principale || 'Analyse IA'}
+                                </h4>
+                                <p style={{ margin: 0, fontSize: '1rem', lineHeight: '1.6', color: 'var(--text-color)' }}>
+                                    {scrapableContent.ai_classification.description_générale || scrapableContent.ai_classification.summary}
+                                </p>
+                            </div>
+                        </div>
+                        
+                        {scrapableContent.ai_classification.services_proposés && (
+                            <div style={{ marginTop: '1.5rem' }}>
+                                <span style={{ fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '1px', color: 'var(--text-muted)', fontWeight: '600', display: 'block', marginBottom: '0.75rem' }}>
+                                    Services & Contenus Identifiés
+                                </span>
+                                <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                                    {scrapableContent.ai_classification.services_proposés.map((service, i) => (
+                                        <div key={i} style={{ 
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '6px',
+                                            fontSize: '0.9rem', 
+                                            background: 'var(--bg-secondary)', 
+                                            padding: '6px 12px', 
+                                            borderRadius: '6px', 
+                                            border: '1px solid var(--border-color)',
+                                            color: 'var(--text-color)'
+                                        }}>
+                                            <span className="material-icons" style={{ fontSize: '1rem', color: 'var(--success)' }}>check_circle</span>
+                                            {service}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                        
+                        {/* Show VALID detected technical types below */}
+                        {contentTypes.filter(t => t.count > 0 || t.count === 'N/A').length > 0 && (
+                            <div style={{ marginTop: '2rem', borderTop: '1px solid var(--border-color)', paddingTop: '1.5rem' }}>
+                                <span style={{ fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '1px', color: 'var(--text-muted)', fontWeight: '600', display: 'block', marginBottom: '1rem' }}>
+                                    Détails Techniques Détectés
+                                </span>
+                                <div className="content-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))' }}>
+                                    {contentTypes.filter(t => t.count > 0 || t.count === 'N/A').map((type) => {
+                                        const isSelected = selectedTypes.includes(type.id || type.type);
+                                        return (
+                                            <div
+                                                key={type.id || type.type}
+                                                className={`content-type-card ${isSelected ? 'selected' : ''}`}
+                                                onClick={() => toggleContentType(type.id || type.type)}
+                                                style={{ padding: '0.75rem', cursor: 'pointer' }}
+                                            >
+                                                <div className="checkbox-indicator"></div>
+                                                <span className="material-icons content-icon" style={{ fontSize: '1.2rem' }}>{type.icon}</span>
+                                                <div className="content-title" style={{ fontSize: '0.9rem' }}>{type.title || type.name}</div>
+                                                <div className="content-count" style={{ fontSize: '0.8rem' }}>{type.count === 'N/A' ? 'Présent' : type.count}</div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                ) : (
+                  contentTypes.length > 0 ? (
                   <div className="content-grid">
-                    {contentTypes.map((type) => (
-                      <div
-                        key={type.id}
-                        className={`content-type-card ${selectedTypes.includes(type.id) ? 'selected' : ''}`}
-                        onClick={() => toggleContentType(type.id)}
-                      >
-                        <div className="checkbox-indicator"></div>
-                        <span className="material-icons content-icon">{type.icon}</span>
-                        <div className="content-title">{type.title}</div>
-                        <div className="content-description">{type.description}</div>
-                        <div className="content-count">{type.count}</div>
-                      </div>
-                    ))}
+                    {contentTypes.map((type) => {
+                        // Empêcher la sélection des types vides ou non pertinents si l'IA a trouvé mieux
+                        const isAiGenerated = type.ai_generated;
+                        const isDisabled = type.count === 0 && !isAiGenerated;
+                        
+                        return (
+                          <div
+                            key={type.id || type.type}
+                            className={`content-type-card ${selectedTypes.includes(type.id || type.type) ? 'selected' : ''} ${isDisabled ? 'disabled' : ''} ${isAiGenerated ? 'ai-highlight' : ''}`}
+                            onClick={() => !isDisabled && toggleContentType(type.id || type.type)}
+                            style={{ 
+                                opacity: isDisabled ? 0.5 : 1, 
+                                cursor: isDisabled ? 'not-allowed' : 'pointer',
+                                borderColor: isAiGenerated ? 'var(--primary)' : undefined,
+                                boxShadow: isAiGenerated ? '0 0 10px rgba(var(--primary-rgb), 0.2)' : undefined
+                            }}
+                          >
+                            <div className="checkbox-indicator"></div>
+                            <span className="material-icons content-icon">{type.icon}</span>
+                            <div className="content-title">
+                                {type.title || type.name}
+                                {isAiGenerated && <span className="material-icons" style={{ fontSize: '0.8rem', marginLeft: '4px', color: 'var(--primary)', verticalAlign: 'middle' }}>auto_awesome</span>}
+                            </div>
+                            <div className="content-description">{type.description}</div>
+                            <div className="content-count">
+                                {type.count === 'N/A' ? 'Détecté' : type.count}
+                            </div>
+                          </div>
+                        );
+                    })}
                   </div>
                 ) : (
                   <div style={{ 
@@ -1134,14 +1497,14 @@ export default function Analysis() {
                     <p style={{ fontSize: '1.1rem', marginBottom: '0.5rem' }}>Aucun type de contenu détecté</p>
                     <p style={{ fontSize: '0.9rem' }}>L'analyse n'a trouvé aucun élément extractible sur ce site.</p>
                   </div>
-                )}
+                ))}
               </div>
               
               {/* Scrapable Content Details */}
               {scrapableContent && scrapableContent.detected_types && scrapableContent.detected_types.length > 0 && (
                 <div className="content-types-section" style={{ marginTop: '2rem' }}>
                   <h3 className="section-title">
-                    <span>🔍</span>
+                    <span className="material-icons" style={{ marginRight: '8px' }}>search</span>
                     Contenus scrapables détectés
                   </h3>
                   <div style={{ 
@@ -1276,7 +1639,9 @@ export default function Analysis() {
                   className={`advanced-toggle-btn ${showAdvanced ? 'active' : ''}`}
                   onClick={() => setShowAdvanced(!showAdvanced)}
                 >
-                  <span>⚙️ Options avancées (pour utilisateurs expérimentés)</span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span className="material-icons">settings</span> Options avancées (pour utilisateurs expérimentés)
+                  </span>
                   <span className="toggle-icon">▼</span>
                 </button>
                 
@@ -1346,7 +1711,10 @@ export default function Analysis() {
                   
                   {/* Custom Selector Input */}
                   <div className="selector-input-section">
-                    <div className="selector-title">🎯 Sélecteurs CSS personnalisés (optionnel)</div>
+                    <div className="selector-title">
+                      <span className="material-icons" style={{ verticalAlign: 'middle', marginRight: '8px' }}>gps_fixed</span> 
+                      Sélecteurs CSS personnalisés (optionnel)
+                    </div>
                     <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
                       Pour les utilisateurs avancés : spécifiez vos propres sélecteurs CSS pour extraire des données précises.
                     </p>
@@ -1372,14 +1740,14 @@ export default function Analysis() {
                             className="btn-remove"
                             onClick={() => removeCustomSelector(index)}
                           >
-                            ✕
+                            <span className="material-icons" style={{ fontSize: '1.2rem' }}>close</span>
                           </button>
                         </div>
                       ))}
                     </div>
                     
                     <button className="btn-add-field" onClick={addCustomSelector}>
-                      ➕ Ajouter un champ personnalisé
+                      <span className="material-icons" style={{ verticalAlign: 'middle', marginRight: '4px', fontSize: '1.1rem' }}>add_circle</span> Ajouter un champ personnalisé
                     </button>
                   </div>
                 </div>
@@ -1388,7 +1756,7 @@ export default function Analysis() {
               {/* Storage Format Selection */}
               <div className="storage-section">
                 <h3 className="section-title">
-                  <span>💾</span>
+                  <span className="material-icons" style={{ marginRight: '8px' }}>save</span>
                   Format de stockage
                 </h3>
                 <p className="card-description" style={{ marginBottom: '1.5rem' }}>
@@ -1402,7 +1770,7 @@ export default function Analysis() {
                       className={`format-card ${selectedFormat === format.id ? 'selected' : ''}`}
                       onClick={() => setSelectedFormat(format.id)}
                     >
-                      <div className="format-icon">{format.icon}</div>
+                      <div className="format-icon"><span className="material-icons">{format.icon}</span></div>
                       <div className="format-name">{format.name}</div>
                     </div>
                   ))}
@@ -1418,7 +1786,7 @@ export default function Analysis() {
                     />
                     <span className="checkbox-custom"></span>
                     <span className="checkbox-text">
-                      🖼️ Inclure les images en ZIP (téléchargement séparé)
+                      <span className="material-icons" style={{ verticalAlign: 'middle', marginRight: '6px' }}>folder_zip</span> Inclure les images en ZIP (téléchargement séparé)
                     </span>
                   </label>
                 </div>
@@ -1433,10 +1801,10 @@ export default function Analysis() {
                     setCurrentStep(1);
                   }}
                 >
-                  ← Retour
+                  <span className="material-icons" style={{ verticalAlign: 'middle', marginRight: '4px' }}>arrow_back</span> Retour
                 </button>
                 <button className="btn-primary" onClick={handleStartScraping}>
-                  <span>🚀</span>
+                  <span className="material-icons" style={{ marginRight: '8px' }}>rocket_launch</span>
                   Lancer le scraping
                 </button>
               </div>

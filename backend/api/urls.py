@@ -14,7 +14,7 @@ from .views import (
     ResultsViewSet,
     ReportsViewSet,
     SettingsViewSet,
-    export_results
+    export_results_post
 )
 
 # Router DRF pour les ViewSets
@@ -52,10 +52,12 @@ urlpatterns = [
         permission_classes=[AllowAny]
     ), name='analysis-quick-analyze'),
     path('analysis/preview/', AnalysisViewSet.as_view({'post': 'preview'}), name='analysis-preview'),
+    path('analysis/estimate/', AnalysisViewSet.as_view({'post': 'estimate'}), name='analysis-estimate'),
     path('analysis/analyze/', AnalysisViewSet.as_view({'post': 'analyze'}), name='analysis-analyze'),
     
-    # Routes d'export - AVANT le router pour éviter les conflits
-    path('export/<int:session_id>/', export_results, name='export-results'),
+    # Routes d'export
+    # path('export/<int:session_id>/', export_results, name='export-results'),
+    path('scraping/export/', export_results_post, name='scraping-export-post'),
     
     # Routes des paramètres
     path('settings/api-keys/', SettingsViewSet.as_view({'get': 'api_keys', 'post': 'api_keys'}), name='settings-api-keys'),

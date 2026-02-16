@@ -104,7 +104,7 @@ const ForgotPassword = () => {
               ) : (
                 <>
                   <span>Envoyer le code</span>
-                  <span className="btn-icon">→</span>
+                  <span className="material-icons btn-icon">arrow_forward</span>
                 </>
               )}
             </button>

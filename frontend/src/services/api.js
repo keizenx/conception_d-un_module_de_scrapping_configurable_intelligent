@@ -302,6 +302,16 @@ class APIService {
 
   // ==================== ANALYSIS ====================
   
+  async estimatePages(url) {
+    const response = await fetch(`${API_BASE_URL}/analysis/estimate/`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({ url }),
+    });
+    
+    return this.handleResponse(response);
+  }
+
   async quickAnalyze(url) {
     // Analyse rapide sans authentification (pour landing page)
     const response = await fetch(`${API_BASE_URL}/analysis/quick_analyze/`, {
@@ -313,13 +323,14 @@ class APIService {
     return this.handleResponse(response);
   }
   
-  async analyzeURL(url, includeSubdomains = false) {
+  async analyzeURL(url, includeSubdomains = false, maxPages = 10) {
     const response = await fetch(`${API_BASE_URL}/analysis/analyze/`, {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify({ 
         url, 
-        include_subdomains: includeSubdomains 
+        include_subdomains: includeSubdomains,
+        max_pages: maxPages
       }),
     });
     
@@ -412,7 +423,7 @@ class APIService {
   }
 
   async stopScraping(sessionId) {
-    const response = await fetch(`${API_BASE_URL}/scraping/${sessionId}/stop/`, {
+    const response = await fetch(`${API_BASE_URL}/scraping/${sessionId}/cancel/`, {
       method: 'POST',
       headers: this.getHeaders(),
     });
@@ -457,24 +468,18 @@ class APIService {
     const timeoutId = setTimeout(() => controller.abort(), format === 'zip_images' ? 300000 : 60000); // 5min pour images, 1min sinon
     
     try {
-      // Construire les paramètres de requête
-      const params = new URLSearchParams({ type: format });
-      
-      // Ajouter la limite si spécifiée
-      if (options.limit && options.limit > 0) {
-        params.append('limit', options.limit);
-      }
-      
-      // Ajouter les IDs si spécifiés
-      if (options.item_ids && Array.isArray(options.item_ids) && options.item_ids.length > 0) {
-        params.append('item_ids', options.item_ids.join(','));
-      }
-      
+      // Nouvelle méthode POST avec body JSON
       const response = await fetch(
-        `${API_BASE_URL}/results/${sessionId}/export/?${params.toString()}`,
+        `${API_BASE_URL}/scraping/export/`,
         {
-          method: 'GET',
+          method: 'POST',
           headers: this.getHeaders(),
+          body: JSON.stringify({
+            session_id: sessionId,
+            format: format,
+            items: options.item_ids || [],
+            limit: options.limit
+          }),
           signal: controller.signal,
         }
       );

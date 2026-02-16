@@ -33,9 +33,9 @@ function NotificationCenter() {
   // Obtenir le label selon le type de tâche
   const getTaskLabel = (task) => {
     if (task.type === 'analysis') {
-      return `🔍 Analyse de ${task.url}`;
+      return `Analyse de ${task.url}`;
     }
-    return `🚀 Scraping de ${task.url}`;
+    return `Scraping de ${task.url}`;
   };
 
   return (
@@ -47,7 +47,9 @@ function NotificationCenter() {
             <div key={task.id} className={`progress-item ${task.type}`}>
               <div className="progress-content">
                 <div className="progress-icon">
-                  <span className="spinner">{task.type === 'analysis' ? '🔍' : '⏳'}</span>
+                  <span className={`material-icons ${task.status === 'running' ? 'spin' : ''}`}>
+                    {task.type === 'analysis' ? 'travel_explore' : 'autorenew'}
+                  </span>
                 </div>
                 <div className="progress-info">
                   <span className="progress-title">
@@ -105,10 +107,10 @@ function NotificationCenter() {
             className={`notification-toast notification-${notification.type}`}
           >
             <div className="notification-icon">
-              {notification.type === 'success' && '✅'}
-              {notification.type === 'error' && '❌'}
-              {notification.type === 'warning' && '⚠️'}
-              {notification.type === 'info' && 'ℹ️'}
+              {notification.type === 'success' && <span className="material-icons" style={{ color: 'var(--success)' }}>check_circle</span>}
+              {notification.type === 'error' && <span className="material-icons" style={{ color: 'var(--error)' }}>error</span>}
+              {notification.type === 'warning' && <span className="material-icons" style={{ color: 'var(--warning)' }}>warning</span>}
+              {notification.type === 'info' && <span className="material-icons" style={{ color: 'var(--info)' }}>info</span>}
             </div>
             <div className="notification-content">
               <div className="notification-title">{notification.title}</div>

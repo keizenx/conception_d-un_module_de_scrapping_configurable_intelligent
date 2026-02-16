@@ -63,11 +63,11 @@ export const ScrapingProvider = ({ children }) => {
   }, []);
 
   // Afficher une notification browser
-  const showBrowserNotification = useCallback((title, body, icon = '⚡') => {
+  const showBrowserNotification = useCallback((title, body, icon = '/favicon.ico') => {
     if ('Notification' in window && Notification.permission === 'granted') {
       new Notification(title, {
         body,
-        icon: '/favicon.ico',
+        icon,
         badge: '/favicon.ico',
         tag: 'scraping-notification',
         requireInteraction: false,
@@ -176,7 +176,7 @@ export const ScrapingProvider = ({ children }) => {
           
           addNotification({
             type: 'success',
-            title: '✅ Analyse terminée !',
+            title: 'Analyse terminée !',
             message: `${results.content_types?.length || 0} types de contenu détectés`,
             sessionId,
             taskType: 'analysis',
@@ -205,7 +205,7 @@ export const ScrapingProvider = ({ children }) => {
           
           addNotification({
             type: 'error',
-            title: '❌ Analyse échouée',
+            title: 'Analyse échouée',
             message: 'Une erreur est survenue lors de l\'analyse',
           });
           
@@ -224,7 +224,7 @@ export const ScrapingProvider = ({ children }) => {
           // Timeout
           addNotification({
             type: 'warning',
-            title: '⏰ Timeout',
+            title: 'Délai dépassé',
             message: 'L\'analyse prend trop de temps',
           });
         }
@@ -243,9 +243,15 @@ export const ScrapingProvider = ({ children }) => {
   }, [addNotification]);
 
   // Lancer une analyse en arrière-plan
-  const startAnalysisTask = useCallback(async (url, includeSubdomains, onComplete) => {
+  const startAnalysisTask = useCallback(async (url, includeSubdomains, maxPages, onComplete) => {
+    // Si maxPages est une fonction, c'est que l'argument maxPages a été omis
+    if (typeof maxPages === 'function') {
+      onComplete = maxPages;
+      maxPages = 10;
+    }
+    
     const taskId = Date.now();
-    console.log('🚀 startAnalysisTask appelé - taskId:', taskId, 'url:', url);
+    console.log('startAnalysisTask appelé - taskId:', taskId, 'url:', url, 'maxPages:', maxPages);
     
     // Ajouter la tâche à la liste
     const task = {
@@ -258,26 +264,26 @@ export const ScrapingProvider = ({ children }) => {
       sessionId: null,
     };
     
-    console.log('📝 Ajout tâche:', task);
+    console.log('Ajout tâche:', task);
     setActiveTasks(prev => {
-      console.log('📊 activeTasks avant ajout:', prev);
+      console.log('activeTasks avant ajout:', prev);
       const newTasks = [...prev, task];
-      console.log('📊 activeTasks après ajout:', newTasks);
+      console.log('activeTasks après ajout:', newTasks);
       return newTasks;
     });
     
     // Notification de démarrage (silencieuse - pas de son)
     addNotification({
       type: 'info',
-      title: '🔍 Analyse lancée',
+      title: 'Analyse lancée',
       message: `Analyse de ${url} en cours...`,
     });
 
     try {
       // Lancer l'analyse
-      console.log('🌐 Appel API analyzeURL...');
-      const response = await api.analyzeURL(url, includeSubdomains);
-      console.log('✅ Réponse API:', response);
+      console.log('Appel API analyzeURL...');
+      const response = await api.analyzeURL(url, includeSubdomains, maxPages);
+      console.log('Réponse API:', response);
       
       if (response.session_id) {
         // Mettre à jour la tâche avec l'ID de session
@@ -288,14 +294,14 @@ export const ScrapingProvider = ({ children }) => {
         ));
         
         // Polling pour suivre la progression
-        console.log('🔄 Démarrage polling pour session:', response.session_id);
+        console.log('Démarrage polling pour session:', response.session_id);
         pollAnalysisStatus(taskId, response.session_id, onComplete);
       }
       
       return { taskId, sessionId: response.session_id };
       
     } catch (error) {
-      console.error('❌ Erreur startAnalysisTask:', error);
+      console.error('Erreur startAnalysisTask:', error);
       // Échec du lancement
       setActiveTasks(prev => prev.map(t => 
         t.id === taskId 
@@ -305,7 +311,7 @@ export const ScrapingProvider = ({ children }) => {
       
       addNotification({
         type: 'error',
-        title: '❌ Erreur d\'analyse',
+        title: 'Erreur d\'analyse',
         message: error.message || 'Impossible de lancer l\'analyse',
       });
       
@@ -354,7 +360,7 @@ export const ScrapingProvider = ({ children }) => {
           
           addNotification({
             type: 'success',
-            title: '✅ Scraping terminé !',
+            title: 'Scraping terminé !',
             message: `${status.total_items || 0} éléments extraits`,
             sessionId,
           });
@@ -382,7 +388,7 @@ export const ScrapingProvider = ({ children }) => {
           
           addNotification({
             type: 'error',
-            title: '❌ Scraping échoué',
+            title: 'Scraping échoué',
             message: status.error || 'Une erreur est survenue',
           });
           
@@ -401,7 +407,7 @@ export const ScrapingProvider = ({ children }) => {
           // Timeout
           addNotification({
             type: 'warning',
-            title: '⏰ Timeout',
+            title: 'Délai dépassé',
             message: 'Le scraping prend trop de temps',
           });
         }
@@ -440,7 +446,7 @@ export const ScrapingProvider = ({ children }) => {
     // Notification de démarrage
     addNotification({
       type: 'info',
-      title: '🚀 Scraping lancé',
+      title: 'Scraping lancé',
       message: `Extraction de ${url} en cours...`,
     });
 
@@ -472,7 +478,7 @@ export const ScrapingProvider = ({ children }) => {
       
       addNotification({
         type: 'error',
-        title: '❌ Erreur de scraping',
+        title: 'Erreur de scraping',
         message: error.message || 'Impossible de lancer le scraping',
       });
       
@@ -502,7 +508,7 @@ export const ScrapingProvider = ({ children }) => {
     // Notification de démarrage
     addNotification({
       type: 'info',
-      title: '🚀 Scraping par lot lancé',
+      title: 'Scraping par lot lancé',
       message: `Extraction de ${urls.length} pages en cours...`,
     });
 
@@ -534,7 +540,7 @@ export const ScrapingProvider = ({ children }) => {
       
       addNotification({
         type: 'error',
-        title: '❌ Erreur de scraping',
+        title: 'Erreur de scraping',
         message: error.message || 'Impossible de lancer le scraping par lot',
       });
       
@@ -544,8 +550,33 @@ export const ScrapingProvider = ({ children }) => {
 
   // Annuler une tâche
   const cancelTask = useCallback((taskId) => {
-    setActiveTasks(prev => prev.filter(t => t.id !== taskId));
-  }, []);
+    setActiveTasks(prev => {
+      const task = prev.find(t => t.id === taskId);
+      
+      if (task && task.sessionId) {
+        // Appel API pour annuler la session sur le serveur
+        api.stopScraping(task.sessionId)
+          .then(() => {
+            console.log(`Session ${task.sessionId} annulée sur le serveur`);
+            addNotification({
+              type: 'info',
+              title: 'Tâche annulée',
+              message: 'L\'opération a été annulée.',
+            });
+          })
+          .catch(err => {
+            console.error('Erreur lors de l\'annulation sur le serveur:', err);
+            // On ne notifie pas l'erreur à l'utilisateur car la tâche est supprimée localement de toute façon
+          });
+      }
+      
+      return prev.filter(t => t.id !== taskId);
+    });
+
+    if (notifiedTasksRef.current.has(taskId)) {
+      notifiedTasksRef.current.delete(taskId);
+    }
+  }, [addNotification]);
 
   // Vérifier si une tâche est en cours
   const isScrapingInProgress = activeTasks.some(t => 

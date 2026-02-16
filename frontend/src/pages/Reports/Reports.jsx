@@ -209,7 +209,7 @@ function Reports() {
       {/* Sidebar */}
       <aside className="sidebar">
         <div className="logo" onClick={() => navigate('/dashboard')} style={{ cursor: 'pointer' }}>
-          <div className="logo-icon">⚡</div>
+          <div className="material-icons logo-icon">bolt</div>
           SCRAPER PRO
         </div>
       </aside>
@@ -235,25 +235,25 @@ function Reports() {
         {/* Summary Grid */}
         <div className="summary-grid">
           <div className="summary-card">
-            <div className="summary-icon">📦</div>
+            <div className="summary-icon material-icons">inventory_2</div>
             <div className="summary-value">{stats.total_sessions}</div>
             <div className="summary-label">Sessions totales</div>
           </div>
 
           <div className="summary-card">
-            <div className="summary-icon">🎯</div>
+            <div className="summary-icon material-icons">data_usage</div>
             <div className="summary-value">{stats.total_elements > 1000 ? `${(stats.total_elements / 1000).toFixed(1)}K` : stats.total_elements}</div>
             <div className="summary-label">Éléments extraits</div>
           </div>
 
           <div className="summary-card">
-            <div className="summary-icon">✅</div>
+            <div className="summary-icon material-icons">check_circle</div>
             <div className="summary-value">{stats.success_rate}%</div>
             <div className="summary-label">Taux de succès moyen</div>
           </div>
 
           <div className="summary-card">
-            <div className="summary-icon">⏱️</div>
+            <div className="summary-icon material-icons">timer</div>
             <div className="summary-value">{stats.avg_time}</div>
             <div className="summary-label">Temps moyen</div>
           </div>
@@ -265,7 +265,7 @@ function Reports() {
           <div className="card">
             <div className="card-header">
               <h3 className="card-title">
-                <span>📊</span>
+                <span className="material-icons" style={{marginRight: '8px'}}>analytics</span>
                 Activité sur 30 jours
               </h3>
               <div className="chart-tabs">
@@ -289,7 +289,7 @@ function Reports() {
           <div className="card">
             <div className="card-header">
               <h3 className="card-title">
-                <span>📊</span>
+                <span className="material-icons" style={{marginRight: '8px'}}>speed</span>
                 Métriques de performance
               </h3>
             </div>
@@ -351,7 +351,7 @@ function Reports() {
         <div className="card">
           <div className="card-header">
             <h3 className="card-title">
-              <span>📜</span>
+              <span className="material-icons" style={{marginRight: '8px'}}>history</span>
               Historique des sessions
             </h3>
           </div>
@@ -404,10 +404,11 @@ function Reports() {
                       </div>
                     </td>
                     <td>
-                      <span className={`status-indicator status-${session.status}`}>
-                        {session.status === 'completed' ? '✅ Terminé' : 
-                         session.status === 'failed' ? '❌ Échoué' : 
-                         session.status === 'in_progress' ? '⏳ En cours' : '⏸️ En attente'}
+                      <span className={`status-indicator status-${session.status}`} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        {session.status === 'completed' ? <><span className="material-icons" style={{ fontSize: '1.2em' }}>check_circle</span> Terminé</> : 
+                         session.status === 'failed' ? <><span className="material-icons" style={{ fontSize: '1.2em' }}>error</span> Échoué</> : 
+                         session.status === 'in_progress' ? <><span className="material-icons" style={{ fontSize: '1.2em' }}>hourglass_empty</span> En cours</> : 
+                         <><span className="material-icons" style={{ fontSize: '1.2em' }}>pause_circle</span> En attente</>}
                       </span>
                     </td>
                     <td><span className="items-count">{session.total_items}</span></td>
@@ -422,14 +423,14 @@ function Reports() {
                               onClick={() => navigate(`/results?session=${session.id}`)}
                               title="Voir les résultats"
                             >
-                              👁️
+                              <span className="material-icons">visibility</span>
                             </button>
                             <button 
                               className="action-btn download-btn"
                               onClick={() => handleViewDetails(`#SCR-${session.id}`)}
                               title="Exporter"
                             >
-                              💾
+                              <span className="material-icons">save_alt</span>
                             </button>
                           </>
                         )}
@@ -446,26 +447,26 @@ function Reports() {
         <div className="export-section">
           <div className="export-header">
             <h3 className="card-title">
-              <span>💾</span>
+              <span className="material-icons" style={{ marginRight: '8px' }}>save</span>
               Exporter les rapports
             </h3>
           </div>
 
           <div className="export-options">
             <div className="export-card" onClick={() => handleExport('CSV')}>
-              <div className="export-icon">📄</div>
+              <div className="material-icons export-icon">description</div>
               <h4>CSV Export</h4>
               <p>Format tableur universel</p>
             </div>
 
             <div className="export-card" onClick={() => handleExport('Excel')}>
-              <div className="export-icon">📊</div>
+              <div className="material-icons export-icon">table_view</div>
               <h4>Excel Export</h4>
               <p>Avec graphiques et mise en forme</p>
             </div>
 
             <div className="export-card" onClick={() => handleExport('JSON')}>
-              <div className="export-icon">🔧</div>
+              <div className="material-icons export-icon">code</div>
               <h4>JSON Export</h4>
               <p>Données structurées pour APIs</p>
             </div>

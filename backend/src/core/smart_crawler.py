@@ -29,10 +29,17 @@ class SmartCrawler:
         self.navigation_links = {}
         
     def is_same_domain(self, url: str) -> bool:
-        """Vérifie si l'URL appartient au même domaine."""
+        """Vérifie si l'URL appartient au même domaine (ou sous-domaine)."""
         parsed = urlparse(url)
-        return parsed.netloc == self.parsed_base.netloc or parsed.netloc == ''
-    
+        if parsed.netloc == '':
+            return True
+            
+        # Comparaison souple pour gérer www et les sous-domaines
+        base_domain = self.parsed_base.netloc.lower().replace('www.', '')
+        target_domain = parsed.netloc.lower().replace('www.', '')
+        
+        return base_domain == target_domain or target_domain.endswith('.' + base_domain)
+
     def normalize_url(self, url: str) -> str:
         """Normalise une URL."""
         # Construire l'URL absolue
@@ -43,7 +50,7 @@ class SmartCrawler:
         url_without_fragment = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
         
         # Retirer le trailing slash sauf pour la racine
-        if parsed.path != '/' and url_without_fragment.endswith('/'):
+        if url_without_fragment.endswith('/'):
             url_without_fragment = url_without_fragment.rstrip('/')
         
         return url_without_fragment
@@ -351,12 +358,42 @@ class SmartCrawler:
         pages_data = []
         
         with sync_playwright() as p:
-            # Lancer le navigateur en mode headless
-            browser = p.chromium.launch(headless=True)
-            context = browser.new_context(
-                user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                viewport={'width': 1920, 'height': 1080}
+            # Lancer le navigateur en mode headless avec options furtives
+            browser = p.chromium.launch(
+                headless=True,
+                args=[
+                    '--disable-blink-features=AutomationControlled',
+                    '--no-sandbox',
+                    '--disable-setuid-sandbox',
+                    '--disable-dev-shm-usage',
+                    '--disable-accelerated-2d-canvas',
+                    '--disable-gpu'
+                ]
             )
+            context = browser.new_context(
+                user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+                viewport={'width': 1920, 'height': 1080},
+                device_scale_factor=1,
+                has_touch=False,
+                is_mobile=False,
+                java_script_enabled=True,
+                locale='fr-FR',
+                timezone_id='Europe/Paris'
+            )
+            
+            # Script anti-détection basique
+            context.add_init_script("""
+                Object.defineProperty(navigator, 'webdriver', {
+                    get: () => undefined
+                });
+                Object.defineProperty(navigator, 'languages', {
+                    get: () => ['fr-FR', 'fr', 'en-US', 'en']
+                });
+                Object.defineProperty(navigator, 'plugins', {
+                    get: () => [1, 2, 3, 4, 5]
+                });
+            """)
+            
             page = context.new_page()
             
             while urls_to_visit and len(self.visited_urls) < self.max_pages:
@@ -411,9 +448,38 @@ class SmartCrawler:
         
         # Identifier les pages principales (dans le menu/nav)
         main_pages = []
-        for link_data in all_navigation.get('nav', []) + all_navigation.get('menu', []) + all_navigation.get('header', []):
-            if link_data not in main_pages:
+        seen_main_urls = set()
+        
+        # Mots-clés à exclure des pages principales (pages utilitaires)
+        utility_keywords = [
+            'privacy', 'politique', 'confidentialité', 'mentions', 'légal', 'cgu', 'cgv', 
+            'terms', 'conditions', 'contact', 'login', 'register', 'signin', 'signup',
+            'connexion', 'inscription', 'compte', 'panier', 'cart', 'checkout', 'faq', 'help', 'aide'
+        ]
+        
+        # Prioriser les liens avec du texte et éviter les doublons d'URL
+        all_nav_links = all_navigation.get('nav', []) + all_navigation.get('menu', []) + all_navigation.get('header', [])
+        
+        for link_data in all_nav_links:
+            url = link_data['url']
+            text = link_data.get('text', '').strip()
+            text_lower = text.lower()
+            
+            # Filtrer les pages utilitaires si le texte contient un mot-clé exclu
+            if any(keyword in text_lower for keyword in utility_keywords):
+                continue
+            
+            if url not in seen_main_urls:
+                seen_main_urls.add(url)
                 main_pages.append(link_data)
+            elif text:
+                # Si on a déjà l'URL mais que l'entrée actuelle a un meilleur texte (et que l'existante n'en a pas ou peu)
+                # On pourrait mettre à jour, mais pour l'instant on garde le premier trouvé
+                # Optionnel: remplacer si l'entrée existante est "Sans titre" ou vide
+                for idx, existing in enumerate(main_pages):
+                    if existing['url'] == url and (not existing['text'] or existing['text'] == 'Sans titre'):
+                        main_pages[idx] = link_data
+                        break
         
         print(f"\n{'='*60}")
         print(f"RÉSULTATS DU CRAWL")

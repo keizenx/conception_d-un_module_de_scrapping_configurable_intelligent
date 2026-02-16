@@ -48,7 +48,54 @@ class SiteEstimator:
                 'recommended_max_crawl': min(sitemap_result['count'], 100)
             }
         
-        # Stratégie 2: Robots.txt + échantillonnage
+        # Stratégie 1.5: OSINT (Wayback Machine, URLScan)
+        osint_result = self._check_osint()
+        if osint_result and osint_result['count'] > 0:
+            return {
+                'estimated_pages': osint_result['count'],
+                'confidence': 'medium',
+                'method': f"OSINT ({osint_result['source']})",
+                'details': osint_result,
+                'recommended_max_crawl': min(osint_result['count'], 100)
+            }
+
+        # Stratégie 2: PageDetector (Playwright) pour sites JS/SPA
+        # C'est plus lent mais beaucoup plus précis pour les sites modernes comme babiloc.com
+        try:
+            from .page_detector import PageDetector
+            print(f"[*] PageDetector (Playwright) scanning: {self.base_url}")
+            detector = PageDetector(self.base_url, timeout=self.timeout * 1000)
+            detector_result = detector.analyze_with_screenshot(max_depth=1)
+            
+            pages_found = detector_result['total_pages']
+            stats = detector_result.get('stats', {})
+            print(f"[+] PageDetector result: found {pages_found} pages, stats: {stats}")
+            
+            if pages_found > 0:
+                # Si on trouve des pages via Playwright, c'est très fiable
+                estimated = pages_found
+                
+                # Si pagination détectée, on multiplie
+                if stats.get('has_pagination'):
+                    estimated = int(estimated * 3)
+                    print(f"[+] Pagination detected, multiplying estimation to {estimated}")
+                
+                return {
+                    'estimated_pages': estimated,
+                    'confidence': 'high',
+                    'method': 'Playwright Scan (JS detected)',
+                    'details': {
+                        'pages_found': pages_found,
+                        'stats': stats
+                    },
+                    'recommended_max_crawl': min(estimated, 100)
+                }
+        except Exception as e:
+            print(f"[-] PageDetector failed: {e}")
+            import traceback
+            print(traceback.format_exc())
+
+        # Stratégie 3: Robots.txt + échantillonnage (Fallback statique)
         robots_result = self._check_robots()
         sample_result = self._sample_homepage()
         
@@ -56,9 +103,17 @@ class SiteEstimator:
         if sample_result and sample_result.get('links_count', 0) > 0:
             # Estimation basique: nombre de liens trouvés * facteur de profondeur
             links_count = sample_result['links_count']
-            depth_factor = 2.5  # Estimation moyenne de pages par niveau
             
-            estimated = int(links_count * depth_factor)
+            # Si peu de liens (< 5), on suppose que le site est plat/petit (Landing page)
+            if links_count < 5:
+                # CORRECTION: Ne pas ajouter +1 artificiellement si on veut être strict sur les liens trouvés
+                # Si links_count = 2 (home + contact), on estime à 2.
+                estimated = max(links_count, 1) 
+                confidence = 'high'
+            else:
+                depth_factor = 2.5  # Estimation moyenne de pages par niveau
+                estimated = int(links_count * depth_factor)
+                confidence = 'medium'
             
             # Ajuster avec robots.txt si disponible
             if robots_result and robots_result.get('crawl_delay'):
@@ -67,11 +122,10 @@ class SiteEstimator:
             
             return {
                 'estimated_pages': estimated,
-                'confidence': 'medium',
-                'method': 'sampling',
+                'confidence': confidence,
+                'method': 'sampling (analyse page d\'accueil)',
                 'details': {
                     'homepage_links': links_count,
-                    'depth_factor': depth_factor,
                     'robots_info': robots_result
                 },
                 'recommended_max_crawl': min(estimated, 100)
@@ -86,6 +140,52 @@ class SiteEstimator:
             'recommended_max_crawl': 50
         }
     
+    def _check_osint(self) -> Optional[Dict]:
+        """
+        Utilise des sources OSINT (Wayback Machine, URLScan) pour estimer le nombre de pages.
+        Inspiré de la logique subfinder/passive discovery.
+        """
+        domain = urlparse(self.base_url).netloc
+        
+        # 1. URLScan.io
+        try:
+            url = f"https://urlscan.io/api/v1/search/?q=domain:{domain}"
+            with httpx.Client(timeout=10, follow_redirects=True) as client:
+                response = client.get(url)
+                if response.status_code == 200:
+                    data = response.json()
+                    total = data.get('total', 0)
+                    if total > 0:
+                        return {
+                            'count': total,
+                            'source': 'urlscan.io',
+                            'type': 'passive_scan'
+                        }
+        except:
+            pass
+
+        # 2. Wayback Machine (Archive.org)
+        try:
+            # CDX API pour compter les URLs uniques (collapse=urlkey)
+            # On limite à 500 pour ne pas surcharger, mais si on atteint 500 c'est qu'il y en a bcp
+            url = f"http://web.archive.org/cdx/search/cdx?url={domain}/*&output=json&fl=original&collapse=urlkey&limit=500"
+            with httpx.Client(timeout=15, follow_redirects=True) as client:
+                response = client.get(url)
+                if response.status_code == 200:
+                    data = response.json()
+                    # Le premier élément est le header ["original"], on l'enlève
+                    if len(data) > 1:
+                        count = len(data) - 1
+                        return {
+                            'count': count if count < 500 else 500, # Si 500, c'est probablement plus
+                            'source': 'wayback_machine',
+                            'type': 'historical_index'
+                        }
+        except:
+            pass
+            
+        return None
+
     def _check_sitemap(self) -> Optional[Dict]:
         """
         Vérifie sitemap.xml pour compter les URLs.

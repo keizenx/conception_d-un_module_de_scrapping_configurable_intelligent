@@ -20,7 +20,7 @@ import json
 import csv
 import io
 
-from .models import User, ScrapingSession, ScrapedData, Report, ApiKey, Webhook
+from .models import User, ScrapingSession, ScrapedData, Report, ApiKey, Webhook, KnownPath
 from .serializers import (
     UserSerializer, RegisterSerializer, LoginSerializer,
     ScrapingSessionSerializer, CreateScrapingSessionSerializer,
@@ -41,6 +41,7 @@ try:
     from core.site_checker import SiteChecker, filter_scrapable_sites
     from core.path_finder import discover_paths
     from core.smart_crawler import discover_paths_smart
+    from core.site_estimator import SiteEstimator
     from core.fetcher_playwright import take_screenshot
     SCRAPER_AVAILABLE = True
 except ImportError as e:
@@ -50,6 +51,7 @@ except ImportError as e:
     discover_subdomains = None
     discover_paths = None
     discover_paths_smart = None
+    SiteEstimator = None
     take_screenshot = None
     SiteChecker = None
     filter_scrapable_sites = None
@@ -139,7 +141,7 @@ class AuthViewSet(viewsets.ViewSet):
         token, created = Token.objects.get_or_create(user=user)
         return Response({
             'token': token.key,
-            'user': UserSerializer(user).data,
+            'user': UserSerializer(user, context={'request': request}).data,
             'message': 'Email vérifié, compte activé'
         }, status=status.HTTP_200_OK)
     
@@ -187,7 +189,7 @@ class AuthViewSet(viewsets.ViewSet):
             token, created = Token.objects.get_or_create(user=user)
             return Response({
                 'token': token.key,
-                'user': UserSerializer(user).data,
+                'user': UserSerializer(user, context={'request': request}).data,
                 'message': 'Connexion réussie'
             }, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -230,7 +232,7 @@ class AuthViewSet(viewsets.ViewSet):
         token, created = Token.objects.get_or_create(user=user)
         return Response({
             'token': token.key,
-            'user': UserSerializer(user).data,
+            'user': UserSerializer(user, context={'request': request}).data,
             'message': 'Connexion 2FA réussie'
         }, status=status.HTTP_200_OK)
 
@@ -329,7 +331,7 @@ class AuthViewSet(viewsets.ViewSet):
         Récupère les informations de l'utilisateur connecté.
         GET /api/auth/me/
         """
-        serializer = UserSerializer(request.user)
+        serializer = UserSerializer(request.user, context={'request': request})
         return Response(serializer.data)
     
     @action(detail=False, methods=['get', 'put'], permission_classes=[IsAuthenticated], url_path='profile')
@@ -667,6 +669,67 @@ class AnalysisViewSet(viewsets.ViewSet):
     permission_classes = [IsAuthenticated]
     
     @action(detail=False, methods=['post'], permission_classes=[AllowAny])
+    def estimate(self, request):
+        """
+        Estime le nombre de pages d'un site.
+        POST /api/analysis/estimate/
+        Body: { "url": "https://example.com" }
+        """
+        url = request.data.get('url')
+        
+        if not url:
+            return Response({'error': 'URL requise'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            if not SCRAPER_AVAILABLE:
+                return Response({'error': 'Service d\'estimation non disponible'}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+            
+            # 1. Utiliser DIRECTEMENT SmartCrawler pour obtenir le compte exact
+            # C'est ce que l'utilisateur veut : "le nombre de page exact car babiloc fait 2 pages"
+            print(f"[*] Lancement SmartCrawler pour estimation précise (mode discovery): {url}")
+            
+            # On utilise une limite raisonnable pour ne pas bloquer trop longtemps l'estimation
+            # Mais suffisante pour un petit/moyen site
+            paths_result = discover_paths_smart(url, max_pages=50)
+            
+            # Utiliser pages_crawled car total_paths exclut la homepage (/)
+            # Si le crawl s'est terminé naturellement (pas max_pages atteint), c'est le nombre exact de pages
+            real_count = paths_result.get('pages_crawled', 0)
+            
+            # Si échec total, fallback sur SiteEstimator
+            if real_count == 0:
+                 if SiteEstimator:
+                    estimator = SiteEstimator(url, timeout=10)
+                    estimation = estimator.estimate_total_pages()
+                    real_count = estimation['estimated_pages']
+                    method = estimation['method']
+                    confidence = estimation['confidence']
+                 else:
+                    real_count = 1
+                    method = 'fallback'
+                    confidence = 'low'
+            else:
+                method = 'Smart Crawler (Exact Count)'
+                confidence = 'high'
+
+            return Response({
+                'success': True,
+                'url': url,
+                'estimated_pages': real_count,
+                'confidence': confidence,
+                'recommended_max': real_count,
+                'method': method
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            print(f"Erreur lors de l'estimation: {e}")
+            return Response({
+                'success': False,
+                'error': str(e),
+                'estimated_pages': 0
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['post'], permission_classes=[AllowAny])
     def quick_analyze(self, request):
         """
         Analyse rapide publique (sans authentification) pour la landing page.
@@ -781,9 +844,18 @@ class AnalysisViewSet(viewsets.ViewSet):
             return Response({'error': 'URL requise'}, status=status.HTTP_400_BAD_REQUEST)
         
         # Configuration avec options avancées
+        # Si un nombre de pages est forcé par l'utilisateur (via le champ de saisie), on l'utilise
+        # Sinon, on prend la valeur par défaut ou celle estimée
+        user_max_pages = request.data.get('max_pages')
+        try:
+            if user_max_pages:
+                user_max_pages = int(user_max_pages)
+        except:
+            user_max_pages = None
+            
         config = {
             'include_subdomains': include_subdomains,
-            'max_pages': max_pages,
+            'max_pages': user_max_pages if user_max_pages else 10, # Priorité à l'input utilisateur
             'depth': advanced_options.get('depth', 2),
             'delay': advanced_options.get('delay', 500),
             'user_agent': advanced_options.get('user_agent', 'Chrome (Desktop)'),
@@ -838,6 +910,11 @@ class AnalysisViewSet(viewsets.ViewSet):
         timeout = config.get('timeout', 30)
         
         try:
+            # Vérifier si annulé
+            session.refresh_from_db()
+            if session.status == 'failed' and 'Annulé' in (session.error_message or ''):
+                return
+
             # Étape 1: Vérifier que le site est accessible et scrapable
             site_check = None
             if SCRAPER_AVAILABLE and SiteChecker:
@@ -845,6 +922,11 @@ class AnalysisViewSet(viewsets.ViewSet):
                 checker = SiteChecker(timeout=timeout)  # Utiliser timeout des options
                 site_check = checker.check_site(url)
                 
+                # Vérifier si annulé
+                session.refresh_from_db()
+                if session.status == 'failed' and 'Annulé' in (session.error_message or ''):
+                    return
+
                 # Si le site n'est pas scrapable, marquer la session comme échouée
                 if not site_check['scrapable']:
                     session.add_log(f"[!] Site protégé ou inaccessible: {site_check.get('status_info', {}).get('message', 'Erreur')}", 'warning')
@@ -853,6 +935,11 @@ class AnalysisViewSet(viewsets.ViewSet):
                 
                 session.add_log(f"[✓] Site accessible et scrapable", 'success')
             
+            # Vérifier si annulé
+            session.refresh_from_db()
+            if session.status == 'failed' and 'Annulé' in (session.error_message or ''):
+                return
+
             # Étape 2: Découverte de sous-domaines si demandée
             subdomains_data = None
             if include_subdomains and SCRAPER_AVAILABLE and discover_subdomains:
@@ -866,6 +953,11 @@ class AnalysisViewSet(viewsets.ViewSet):
                     max_subdomains=50
                 )
                 
+                # Vérifier si annulé
+                session.refresh_from_db()
+                if session.status == 'failed' and 'Annulé' in (session.error_message or ''):
+                    return
+
                 # Vérifier les sous-domaines scrapables
                 if subdomains_result.get('subdomains') and SiteChecker:
                     session.add_log(f"[*] Vérification de {len(subdomains_result['subdomains'])} sous-domaines...")
@@ -900,6 +992,11 @@ class AnalysisViewSet(viewsets.ViewSet):
                     }
                     session.add_log(f"[✓] {len(scrapable_domains)} sous-domaines scrapables trouvés", 'success')
             
+            # Vérifier si annulé
+            session.refresh_from_db()
+            if session.status == 'failed' and 'Annulé' in (session.error_message or ''):
+                return
+
             # Étape 2b: Crawling intelligent avec Playwright
             paths_data = None
             if SCRAPER_AVAILABLE and discover_paths_smart:
@@ -920,15 +1017,26 @@ class AnalysisViewSet(viewsets.ViewSet):
                     'info'
                 )
                 
+                # Vérifier si annulé
+                session.refresh_from_db()
+                if session.status == 'failed' and 'Annulé' in (session.error_message or ''):
+                    return
+
                 # Ajuster le nombre de pages à crawler
                 # L'utilisateur peut forcer une limite via la requête
                 user_max_pages = config.get('max_pages')
+                
+                try:
+                    if user_max_pages:
+                        user_max_pages = int(user_max_pages)
+                except (ValueError, TypeError):
+                    user_max_pages = None
                 
                 if user_max_pages and isinstance(user_max_pages, int) and user_max_pages > 0:
                     max_pages_to_crawl = user_max_pages
                     session.add_log(f"⚙️ Limite de pages forcée par l'utilisateur: {max_pages_to_crawl}", 'info')
                 else:
-                    # Sinon, on utilise la recommandation
+                    # Sinon, on utilise la recommandation (ou 10 par défaut)
                     max_pages_to_crawl = min(recommended_max, 100)  # Maximum absolu de 100
                 
                 session.add_log(f"[*] Crawl intelligent du site avec Playwright...")
@@ -937,6 +1045,63 @@ class AnalysisViewSet(viewsets.ViewSet):
                 # Lancer le crawling avec la limite adaptative
                 paths_result = discover_paths_smart(url, max_pages=max_pages_to_crawl)
                 
+                # --- NOUVEAU: Gestion intelligente des liens (KnownPath) ---
+                try:
+                    from urllib.parse import urlparse
+                    domain = urlparse(url).netloc
+                    
+                    # Récupérer les chemins déjà connus
+                    existing_paths = set(KnownPath.objects.filter(domain=domain).values_list('path', flat=True))
+                    
+                    if paths_result.get('paths'):
+                        current_paths = set(paths_result['paths'])
+                        
+                        # Identifier les nouveaux chemins
+                        new_paths = current_paths - existing_paths
+                        new_paths_count = len(new_paths)
+                        
+                        if new_paths:
+                            session.add_log(f"🆕 {new_paths_count} nouveaux chemins détectés (sur {len(current_paths)} trouvés)", 'success')
+                            
+                            # Ajouter les nouveaux chemins à la DB
+                            new_objects = []
+                            for path in new_paths:
+                                # Trouver l'URL complète
+                                full_url = None
+                                for p in paths_result.get('all_pages', []):
+                                    if p.get('path') == path:
+                                        full_url = p.get('url')
+                                        break
+                                
+                                if not full_url:
+                                    # Reconstruire URL si non trouvée
+                                    scheme = urlparse(url).scheme or 'https'
+                                    full_url = f"{scheme}://{domain}{path}"
+                                    
+                                new_objects.append(KnownPath(
+                                    domain=domain,
+                                    path=path,
+                                    url=full_url
+                                ))
+                            
+                            if new_objects:
+                                KnownPath.objects.bulk_create(new_objects, ignore_conflicts=True)
+                        else:
+                            if len(existing_paths) > 0:
+                                session.add_log(f"ℹ️ Aucun nouveau chemin détecté par rapport à la base ({len(existing_paths)} connus)", 'info')
+                            
+                        # Mettre à jour last_seen pour les chemins vus
+                        KnownPath.objects.filter(domain=domain, path__in=current_paths).update(last_seen=timezone.now())
+                        
+                except Exception as e:
+                    print(f"Erreur KnownPath: {e}")
+                    # Ne pas bloquer le reste si ça échoue
+                
+                # Vérifier si annulé
+                session.refresh_from_db()
+                if session.status == 'failed' and 'Annulé' in (session.error_message or ''):
+                    return
+
                 # Logger les pages découvertes (après le crawling)
                 if paths_result.get('all_pages'):
                     session.add_log(f"📄 {len(paths_result['all_pages'])} pages découvertes:", 'success')
@@ -964,6 +1129,11 @@ class AnalysisViewSet(viewsets.ViewSet):
                     }
                     session.add_log(f"[✓] {paths_result.get('pages_crawled', 0)} pages crawlées avec succès", 'success')
             
+            # Vérifier si annulé
+            session.refresh_from_db()
+            if session.status == 'failed' and 'Annulé' in (session.error_message or ''):
+                return
+
             # Étape 3: Analyser le contenu avec Perplexity pour identification intelligente
             content_types = {}  # Utiliser un dict pour regrouper par type
             scrapable_content_data = None
@@ -973,12 +1143,23 @@ class AnalysisViewSet(viewsets.ViewSet):
                 # Analyser la page principale
                 result = analyze_url(url, max_candidates=5, max_items_preview=3, use_js=True)
                 
+                # Vérifier si annulé
+                session.refresh_from_db()
+                if session.status == 'failed' and 'Annulé' in (session.error_message or ''):
+                    return
+                
                 # Si pas de contenu, essayer d'autres pages
                 if not result.get('collections') and paths_data and paths_data.get('main_pages'):
                     session.add_log(f"[*] Analyse des pages secondaires...")
                     for page in paths_data['main_pages'][:3]:
                         try:
                             page_url = page.get('url', '')
+                            
+                            # Normaliser l'URL si relative
+                            if page_url and page_url.startswith('/'):
+                                from urllib.parse import urljoin
+                                page_url = urljoin(url, page_url)
+                                
                             if page_url and page_url != url:
                                 session.add_log(f"    └─ Analyse de {page_url}...")
                                 result = analyze_url(page_url, max_candidates=5, max_items_preview=3, use_js=True)
@@ -1048,7 +1229,8 @@ class AnalysisViewSet(viewsets.ViewSet):
                         'has_pagination': scrapable.get('has_pagination', False),
                         'recommended_action': scrapable.get('recommended_action', 'full_crawl'),
                         'rejected_types': scrapable.get('rejected_types', []),
-                        'ai_validation': scrapable.get('ai_validation', {})
+                        'ai_validation': scrapable.get('ai_validation', {}),
+                        'ai_classification': scrapable.get('ai_classification', None)
                     }
                     session.add_log(f"[✓] {scrapable.get('total_types', 0)} types de contenu détectés: {', '.join([t['name'] for t in scrapable.get('detected_types', [])])}", 'info')
                 
@@ -1112,30 +1294,98 @@ def extract_content_from_soup(session, url, soup, content_types):
                 images = soup.find_all('img')
                 videos = soup.find_all('video')
                 video_sources = soup.find_all('source')
+                iframes = soup.find_all('iframe')
                 media_links = soup.find_all('a', href=True)
                 
                 # Traiter les images
                 for img in images:
-                    src = img.get('src', '') or img.get('data-src', '') or img.get('data-original', '')
+                    # Gestion améliorée des sources (lazy loading, srcset)
+                    src = img.get('src', '') or img.get('data-src', '') or img.get('data-original', '') or img.get('data-lazy-src', '')
+                    
+                    # Gestion du srcset
+                    srcset = img.get('srcset', '') or img.get('data-srcset', '')
+                    if not src and srcset:
+                        # Prendre la première URL du srcset
+                        src = srcset.split(',')[0].split(' ')[0]
+                    
                     if src and src not in media_urls_seen:
                         media_urls_seen.add(src)
                         alt = img.get('alt', '')
                         title = img.get('title', alt)
-                        if src.startswith('/'):
+                        
+                        # Construire URL absolue
+                        if src.startswith('//'):
+                            src = 'https:' + src
+                        elif src.startswith('/'):
                             from urllib.parse import urljoin
                             src = urljoin(url, src)
+                        elif not src.startswith('http'):
+                            from urllib.parse import urljoin
+                            src = urljoin(url, src)
+                            
                         media_elements.append({'src': src, 'alt': alt, 'title': title or 'Image', 'type': 'image'})
                 
-                # Traiter les vidéos
+                # Traiter les vidéos (balise <video>)
                 for video in videos:
-                    src = video.get('src', '')
+                    src = video.get('src', '') or video.get('data-src', '')
+                    poster = video.get('poster', '')
+                    
+                    # Si pas de src direct, chercher dans <source>
+                    if not src:
+                        source = video.find('source')
+                        if source:
+                            src = source.get('src', '')
+                    
                     if src and src not in media_urls_seen:
                         media_urls_seen.add(src)
-                        if src.startswith('/'):
+                        if src.startswith('//'):
+                            src = 'https:' + src
+                        elif src.startswith('/'):
                             from urllib.parse import urljoin
                             src = urljoin(url, src)
-                        media_elements.append({'src': src, 'alt': '', 'title': 'Vidéo', 'type': 'video'})
+                        elif not src.startswith('http'):
+                            from urllib.parse import urljoin
+                            src = urljoin(url, src)
+                            
+                        media_elements.append({'src': src, 'alt': 'Video HTML5', 'title': 'Vidéo HTML5', 'type': 'video', 'poster': poster})
+
+                # Traiter les iframes (YouTube, Vimeo, etc.)
+                for iframe in iframes:
+                    src = iframe.get('src', '') or iframe.get('data-src', '')
+                    if src:
+                        # Filtre basique pour ne garder que les vidéos probables
+                        is_video = any(provider in src for provider in ['youtube', 'youtu.be', 'vimeo', 'dailymotion', 'twitch', 'facebook.com/plugins/video'])
                         
+                        if is_video and src not in media_urls_seen:
+                            media_urls_seen.add(src)
+                            if src.startswith('//'):
+                                src = 'https:' + src
+                            elif src.startswith('/'):
+                                from urllib.parse import urljoin
+                                src = urljoin(url, src)
+                                
+                            title = iframe.get('title', 'Vidéo Embed')
+                            media_elements.append({'src': src, 'alt': title, 'title': title, 'type': 'video', 'is_embed': True})
+                            
+                # Traiter les liens vers des fichiers vidéo
+                video_extensions = ['.mp4', '.webm', '.ogg', '.mov', '.avi', '.mkv', '.flv', '.wmv']
+                for link in media_links:
+                    href = link.get('href', '')
+                    if href and any(href.lower().endswith(ext) for ext in video_extensions):
+                        if href not in media_urls_seen:
+                            media_urls_seen.add(href)
+                            if href.startswith('//'):
+                                href = 'https:' + href
+                            elif href.startswith('/'):
+                                from urllib.parse import urljoin
+                                href = urljoin(url, href)
+                            elif not href.startswith('http'):
+                                from urllib.parse import urljoin
+                                href = urljoin(url, href)
+                                
+                            title = link.get_text(strip=True) or link.get('title', '') or 'Fichier Vidéo'
+                            media_elements.append({'src': href, 'alt': title, 'title': title, 'type': 'video', 'is_file': True})
+
                 # Groupement intelligent
                 grouped_media = {'images': [], 'videos': [], 'audios': [], 'documents': [], 'links': []}
                 for media in media_elements:
@@ -1153,10 +1403,246 @@ def extract_content_from_soup(session, url, soup, content_types):
                             'elements': items,
                             'apercu': ' | '.join([m['src'].split('/')[-1][:30] for m in items[:5]])
                         }
-                        ScrapedData.objects.create(session=session, data=data_item, element_type='grouped_media', source_url=url)
+                        ScrapedData.objects.create(session=session, data=data_item, category=media_type, element_type='grouped_media', source_url=url)
                         scraped_data_items.append(data_item)
                         extracted_count += 1
                         
+            elif type_name == 'ecommerce':
+                # Extraction E-commerce Intelligente
+                products = []
+                
+                # 1. Chercher des conteneurs de produits potentiels
+                potential_products = soup.find_all(attrs={"class": lambda x: x and any(word in x.lower() for word in ["product", "item", "card", "listing", "grid", "result"])})
+                
+                # Si peu de résultats, essayer des balises génériques
+                if len(potential_products) < 2:
+                    potential_products = soup.find_all(['article', 'li'])
+                
+                session.add_log(f"[*] Analyse e-commerce: {len(potential_products)} conteneurs potentiels", 'info')
+                
+                for i, prod in enumerate(potential_products):
+                    # Chercher un prix (pattern simple)
+                    price_elem = prod.find(string=lambda x: x and any(c in x for c in ['€', '$', '£', 'FCFA', 'CFA']))
+                    if not price_elem:
+                        # Chercher dans les classes 'price'
+                        price_tag = prod.find(attrs={"class": lambda x: x and "price" in x.lower()})
+                        if price_tag: price_elem = price_tag.get_text(strip=True)
+                    
+                    # Chercher un titre
+                    title_elem = prod.find(['h1', 'h2', 'h3', 'h4', 'strong', 'a'])
+                    title = title_elem.get_text(strip=True) if title_elem else ""
+                    
+                    # Chercher une image
+                    img_elem = prod.find('img')
+                    img_src = img_elem.get('src', '') if img_elem else ""
+                    if img_src and not img_src.startswith('http'):
+                        from urllib.parse import urljoin
+                        img_src = urljoin(url, img_src)
+                    
+                    # Si on a au moins un titre et (un prix ou une image), c'est probablement un produit
+                    if title and (price_elem or img_src) and len(title) > 3:
+                        product_data = {
+                            'titre': title[:100],
+                            'prix': str(price_elem).strip() if price_elem else "Non spécifié",
+                            'image': img_src,
+                            'description': prod.get_text(strip=True)[:200],
+                            'url_produit': url,
+                            'category': 'ecommerce',
+                            'html': str(prod)[:500]
+                        }
+                        
+                        # Essayer de trouver le lien du produit
+                        link = prod.find('a', href=True)
+                        if link:
+                            href = link['href']
+                            if not href.startswith('http'):
+                                from urllib.parse import urljoin
+                                href = urljoin(url, href)
+                            product_data['url_produit'] = href
+                        
+                        ScrapedData.objects.create(
+                            session=session, 
+                            data=product_data, 
+                            element_type='product', 
+                            source_url=url
+                        )
+                        scraped_data_items.append(product_data)
+                        extracted_count += 1
+                
+                if extracted_count == 0:
+                     session.add_log("[!] Aucun produit détecté avec les méthodes standard. Tentative extraction agressive...", 'warning')
+                     
+                     # 2. STRATÉGIE DE SECOURS MIXTE: Images + Texte riche
+                     
+                     # A. Récupérer les blocs de texte significatifs (h1, h2, h3, p) indépendamment des images
+                     significant_texts = soup.find_all(['h1', 'h2', 'h3', 'p', 'div'])
+                     seen_texts = set()
+                     
+                     for elem in significant_texts:
+                         text = elem.get_text(strip=True)
+                         # Critères de pertinence : longueur > 20, pas de script/style
+                         if len(text) > 20 and len(text) < 1000 and elem.name not in ['script', 'style', 'nav', 'footer']:
+                             if text not in seen_texts:
+                                 seen_texts.add(text)
+                                 
+                                 # Chercher un titre potentiel (le parent ou l'élément lui-même s'il est hN)
+                                 title = ""
+                                 if elem.name in ['h1', 'h2', 'h3']:
+                                     title = text
+                                 else:
+                                     # Chercher un heading précédent
+                                     prev = elem.find_previous(['h1', 'h2', 'h3'])
+                                     if prev:
+                                         title = prev.get_text(strip=True)
+                                     else:
+                                         title = text[:50] + "..."
+                                 
+                                 # Chercher une image associée dans le parent
+                                 parent_img = elem.find_parent().find('img')
+                                 img_src = ""
+                                 if parent_img:
+                                     src = parent_img.get('src', '')
+                                     if src and not src.endswith('.svg'):
+                                         if src.startswith('/'):
+                                             from urllib.parse import urljoin
+                                             src = urljoin(url, src)
+                                         img_src = src
+                                 
+                                 product_data = {
+                                     'titre': title[:100],
+                                     'prix': "Non spécifié",
+                                     'image': img_src, # Peut être vide, c'est pas grave
+                                     'description': text,
+                                     'url_produit': url,
+                                     'category': 'ecommerce', # On garde ecommerce pour l'affichage
+                                     'html': str(elem)[:500]
+                                 }
+                                 
+                                 ScrapedData.objects.create(
+                                     session=session, 
+                                     data=product_data, 
+                                     element_type='product_fallback_text', 
+                                     source_url=url
+                                 )
+                                 scraped_data_items.append(product_data)
+                                 extracted_count += 1
+                     
+                     # B. Récupérer les images qui n'ont PAS été couvertes par le texte (galerie pure)
+                     # ... (Code existant pour les images orphelines si besoin, mais le texte est prioritaire)
+                     
+                     session.add_log(f"[*] Fallback Texte+Images: {extracted_count} éléments extraits", 'info')
+                
+                # NOUVEAU: Extraction systématique de la structure textuelle (H1, H2, H3, P)
+                # Cette étape s'exécute TOUJOURS pour garantir que le texte est capturé, même si des produits sont trouvés.
+                structural_elements = soup.find_all(['h1', 'h2', 'h3', 'p'])
+                text_count = 0
+                
+                # Regrouper les éléments par catégorie
+                grouped_items = {
+                    'main_headings': [],
+                    'section_headings': [],
+                    'sub_headings': [],
+                    'paragraphs': []
+                }
+                
+                # Suivre les textes déjà vus pour ce regroupement spécifique
+                # (en plus du check global scraped_data_items)
+                local_seen_texts = set()
+                
+                for elem in structural_elements:
+                    text = elem.get_text(strip=True)
+                    if len(text) > 15 and elem.name not in ['script', 'style', 'nav', 'footer']:
+                        # Nettoyage basique
+                        text = ' '.join(text.split())
+                        
+                        # Vérifier doublons LOCAUX (dans ce regroupement)
+                        if text in local_seen_texts:
+                            continue
+                            
+                        # Vérifier doublons GLOBAUX (déjà dans un produit ?)
+                        is_duplicate = False
+                        for item in scraped_data_items:
+                            # Vérification stricte pour éviter les faux positifs
+                            # On ne marque comme dupliqué que si le texte est QUASIMENT IDENTIQUE
+                            # à un titre ou une description de produit
+                            if item.get('description') and text == item.get('description').strip():
+                                is_duplicate = True
+                                break
+                            if item.get('titre') and text == item.get('titre').strip():
+                                is_duplicate = True
+                                break
+                        
+                        if not is_duplicate:
+                            local_seen_texts.add(text)
+                            tag = elem.name
+                            category = 'text'
+                            target_list = None
+                            
+                            # Définition de la catégorie et de la liste cible
+                            if tag == 'h1': 
+                                category = 'main_headings'
+                                target_list = grouped_items['main_headings']
+                            elif tag == 'h2': 
+                                category = 'section_headings'
+                                target_list = grouped_items['section_headings']
+                            elif tag == 'h3': 
+                                category = 'sub_headings'
+                                target_list = grouped_items['sub_headings']
+                            elif tag == 'p': 
+                                category = 'paragraphs'
+                                target_list = grouped_items['paragraphs']
+                            
+                            if target_list is not None:
+                                # Contexte (localisation)
+                                context = f"Balise <{tag}>"
+                                parent = elem.find_parent()
+                                if parent:
+                                     parent_cls = ""
+                                     if parent.get('class'):
+                                         parent_cls = ' '.join(parent.get('class'))
+                                     
+                                     if parent_cls:
+                                        context += f" dans <{parent.name} class='{parent_cls}'>"
+                                     else:
+                                        context += f" dans <{parent.name}>"
+                
+                                item_data = {
+                                    'text': text,
+                                    'context': context,
+                                    'html': str(elem)[:500]
+                                }
+                                target_list.append(item_data)
+                
+                # Créer des entrées groupées pour chaque catégorie
+                for category, items in grouped_items.items():
+                    if items:
+                        # Créer un élément groupé
+                        group_title = {
+                            'main_headings': 'Titres Principaux',
+                            'section_headings': 'Titres de Section',
+                            'sub_headings': 'Sous-titres',
+                            'paragraphs': 'Paragraphes'
+                        }.get(category, 'Texte')
+                        
+                        data_item = {
+                            'titre': f"{group_title} ({len(items)})",
+                            'nb_elements': len(items),
+                            'elements': items, # Liste des dictionnaires {text, context, html}
+                            'categorie': category,
+                            'url_produit': url,
+                            'apercu': ' | '.join([i['text'][:50] for i in items[:3]]) + '...'
+                        }
+                        
+                        ScrapedData.objects.create(session=session, data=data_item, element_type='grouped_text', source_url=url)
+                        scraped_data_items.append(data_item)
+                        text_count += len(items)
+                        extracted_count += 1
+                
+                session.add_log(f"[*] Structure textuelle: {text_count} éléments additionnels extraits (groupés)", 'info')
+
+                if extracted_count == 0:
+                     session.add_log("[!] Echec total détection produits. Passage au mode texte.", 'error')
+            
             elif type_name == 'text_content':
                 # Extraction de texte intelligente
                 text_elements = soup.find_all(['h1', 'h2', 'h3', 'p', 'div', 'li', 'span'])
@@ -1968,6 +2454,52 @@ class ScrapingViewSet(viewsets.ModelViewSet):
                                         'tag': elem.name
                                     })
                             
+                            # FALLBACK: Si aucun texte trouvé, utiliser l'extraction avancée Playwright
+                            if not valid_texts:
+                                session.add_log("[!] Aucun texte trouvé avec méthode standard. Tentative extraction avancée (Playwright)...", 'warning')
+                                try:
+                                    from src.core.fetcher_playwright import extract_complete_content_sync
+                                    adv_data = extract_complete_content_sync(url, timeout_seconds=60, scroll_for_dynamic=True)
+                                    
+                                    # Récupérer les textes de l'extraction avancée
+                                    adv_text = adv_data.get('text', {})
+                                    
+                                    # Headings
+                                    for h_level, h_texts in adv_text.get('headings', {}).items():
+                                        for h_text in h_texts:
+                                            if h_text and h_text not in texts_seen:
+                                                texts_seen.add(h_text) # Simple dedup
+                                                valid_texts.append({
+                                                    'element': None,
+                                                    'text': h_text,
+                                                    'tag': h_level
+                                                })
+                                            
+                                    # Paragraphs
+                                    for p_text in adv_text.get('paragraphs', []):
+                                        if p_text and p_text not in texts_seen:
+                                            texts_seen.add(p_text)
+                                            valid_texts.append({
+                                                'element': None,
+                                                'text': p_text,
+                                                'tag': 'p'
+                                            })
+                                        
+                                    # Lists
+                                    for list_item in adv_text.get('lists', []):
+                                        for item_text in list_item.get('items', []):
+                                            if item_text and item_text not in texts_seen:
+                                                texts_seen.add(item_text)
+                                                valid_texts.append({
+                                                    'element': None,
+                                                    'text': item_text,
+                                                    'tag': 'li'
+                                                })
+                                            
+                                    session.add_log(f"[✓] Extraction avancée réussie: {len(valid_texts)} éléments récupérés", 'success')
+                                except Exception as e:
+                                    session.add_log(f"[!] Échec extraction avancée: {str(e)}", 'error')
+
                             session.add_log(f"[*] {len(valid_texts)} textes uniques trouvés (détection intelligente)", 'info')
                             
                             # EXTRACTION SPÉCIALE pour les témoignages et contenus répétés
@@ -2378,319 +2910,138 @@ class ScrapingViewSet(viewsets.ModelViewSet):
             'message': 'Scraping démarré'
         }, status=status.HTTP_201_CREATED)
 
-@api_view(['GET'])
+@api_view(['POST'])
 @permission_classes([AllowAny])
-def export_results(request, session_id):
+def export_results_post(request):
     """
-    Exporte les résultats d'une session de scraping.
-    GET /api/results/{session_id}/
-    GET /api/results/{session_id}/export/?format=csv|excel|json
+    Exporte les résultats d'une session avec options avancées.
+    POST /api/scraping/export/
+    Body: {
+        "session_id": 123,
+        "format": "csv|excel|json|pdf",
+        "items": [1, 2, 3]  // Optionnel: IDs spécifiques
+    }
     """
+    import json
+    import csv
+    from django.http import HttpResponse, JsonResponse
+    from .models import ScrapingSession, ScrapedData
+    
     try:
-        from django.http import HttpResponse
-        import json
-        import csv
-        import io
-        from .models import ScrapingSession
+        data = request.data
+        session_id = data.get('session_id')
+        export_format = data.get('format', 'json').lower()
+        item_ids = data.get('items', [])
         
-        # Récupérer la session - vérifier la propriété si utilisateur authentifié
+        if not session_id:
+            return JsonResponse({'error': 'Session ID required'}, status=400)
+            
         session = ScrapingSession.objects.get(id=session_id)
         
-        # Vérifier que l'utilisateur a accès à cette session
-        if request.user.is_authenticated and session.user != request.user:
-            # Si l'utilisateur est authentifié mais ce n'est pas sa session,
-            # on autorise quand même pour le développement (à restreindre en prod)
+        # Filtrer les données
+        queryset = ScrapedData.objects.filter(session=session)
+        if item_ids and len(item_ids) > 0:
+            # On suppose que item_ids contient les IDs internes de la base
+            # Si le frontend envoie des index (1, 2, 3...), il faudra adapter
+            # Pour l'instant, on suppose que le frontend a les IDs réels
+            # Mais comme le frontend génère des IDs temporaires (1, 2, 3...), 
+            # on va plutôt filtrer sur l'ordre si nécessaire ou tout prendre
             pass
+
+        # Récupérer les données brutes
+        scraped_data_list = [obj.data for obj in queryset]
         
-        # Récupérer les données extraites depuis les instances ScrapedData
-        scraped_objects = session.scraped_data.all()  # relation ForeignKey
-        scraped_data = [obj.data for obj in scraped_objects]
-        
-        # Si format spécifié dans l'URL, générer le fichier de téléchargement
-        export_format = request.GET.get('format', '').lower()
-        
-        if export_format == 'csv':
-            # Export CSV
+        # Si item_ids sont des index (1-based) envoyés par le frontend
+        if item_ids and len(item_ids) > 0 and isinstance(item_ids[0], int):
+            # Filtrer par index
+            indices = set(item_ids)
+            filtered_list = []
+            for idx, item in enumerate(scraped_data_list, 1):
+                if idx in indices:
+                    filtered_list.append(item)
+            if filtered_list:
+                scraped_data_list = filtered_list
+
+        if export_format == 'json':
+            response = HttpResponse(
+                json.dumps(scraped_data_list, indent=2, ensure_ascii=False),
+                content_type='application/json'
+            )
+            response['Content-Disposition'] = f'attachment; filename="export_session_{session_id}.json"'
+            return response
+            
+        elif export_format == 'csv':
             response = HttpResponse(content_type='text/csv; charset=utf-8')
-            response['Content-Disposition'] = f'attachment; filename="scraping_session_{session_id}.csv"'
+            response['Content-Disposition'] = f'attachment; filename="export_session_{session_id}.csv"'
+            response.write(u'\ufeff'.encode('utf8')) # BOM pour Excel
             
-            if scraped_data:
-                writer = csv.DictWriter(response, fieldnames=scraped_data[0].keys())
+            if scraped_data_list:
+                # Aplatir les données pour le CSV
+                flattened_data = []
+                all_keys = set()
+                
+                for item in scraped_data_list:
+                    flat_item = {}
+                    for k, v in item.items():
+                        if isinstance(v, (dict, list)):
+                            flat_item[k] = json.dumps(v, ensure_ascii=False)
+                        else:
+                            flat_item[k] = v
+                        all_keys.add(k)
+                    flattened_data.append(flat_item)
+                
+                writer = csv.DictWriter(response, fieldnames=list(all_keys))
                 writer.writeheader()
-                for row in scraped_data:
-                    writer.writerow(row)
-            else:
-                writer = csv.writer(response)
-                writer.writerow(['Aucune donnée extraite'])
-            
+                writer.writerows(flattened_data)
             return response
             
         elif export_format == 'excel':
-            # Export Excel (simulé avec CSV pour l'instant)
-            response = HttpResponse(
-                content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-            )
-            response['Content-Disposition'] = f'attachment; filename="scraping_session_{session_id}.xlsx"'
+            # Pour l'instant on renvoie du CSV compatible Excel
+            response = HttpResponse(content_type='text/csv; charset=utf-8')
+            response['Content-Disposition'] = f'attachment; filename="export_session_{session_id}.xls"' # Extension .xls pour forcer l'ouverture Excel
+            response.write(u'\ufeff'.encode('utf8'))
             
-            if scraped_data:
-                writer = csv.DictWriter(response, fieldnames=scraped_data[0].keys())
-                writer.writeheader()
-                for row in scraped_data:
-                    writer.writerow(row)
-            else:
-                writer = csv.writer(response)
-                writer.writerow(['Aucune donnée extraite'])
-            
-            return response
-            
-        elif export_format == 'json':
-            # Export JSON
-            response = HttpResponse(content_type='application/json; charset=utf-8')
-            response['Content-Disposition'] = f'attachment; filename="scraping_session_{session_id}.json"'
-            
-            export_data = {
-                'session_id': session.id,
-                'url': session.url,
-                'status': session.status,
-                'scraped_data': scraped_data,
-                'statistics': {
-                    'total_items': len(scraped_data),
-                    'content_types': session.configuration.get('content_types', []),
-                    'total_extracted': len(scraped_data)
-                },
-                'exported_at': timezone.now().isoformat()
-            }
-            
-            json.dump(export_data, response, indent=2, ensure_ascii=False)
-            return response
-        
-        elif export_format == 'xml':
-            # Export XML
-            import re
-            response = HttpResponse(content_type='application/xml; charset=utf-8')
-            response['Content-Disposition'] = f'attachment; filename="scraping_session_{session_id}.xml"'
-            
-            def sanitize_xml_tag(tag):
-                """Nettoie un nom de tag XML pour le rendre valide"""
-                # Remplacer les espaces par des underscores
-                tag = str(tag).replace(' ', '_')
-                # Supprimer les caractères non valides pour XML
-                tag = re.sub(r'[^a-zA-Z0-9_-]', '', tag)
-                # Le tag ne peut pas commencer par un chiffre
-                if tag and tag[0].isdigit():
-                    tag = 'item_' + tag
-                # Fallback si vide
-                return tag or 'field'
-            
-            def sanitize_xml_value(value):
-                """Nettoie une valeur pour XML"""
-                if value is None:
-                    return ''
-                value = str(value)
-                # Échapper les caractères XML
-                value = value.replace('&', '&amp;')
-                value = value.replace('<', '&lt;')
-                value = value.replace('>', '&gt;')
-                value = value.replace('"', '&quot;')
-                value = value.replace("'", '&apos;')
-                return value
-            
-            # Échapper l'URL pour XML
-            safe_url = sanitize_xml_value(session.url)
-            
-            xml_content = '<?xml version="1.0" encoding="UTF-8"?>\n<scraping_session>\n'
-            xml_content += f'  <session_id>{session.id}</session_id>\n'
-            xml_content += f'  <url>{safe_url}</url>\n'
-            xml_content += f'  <status>{session.status}</status>\n'
-            xml_content += '  <data>\n'
-            
-            for item in scraped_data:
-                xml_content += '    <item>\n'
-                if isinstance(item, dict):
-                    for key, value in item.items():
-                        safe_key = sanitize_xml_tag(key)
-                        # Si la valeur est une liste ou dict, la convertir en string
-                        if isinstance(value, (list, dict)):
-                            safe_value = sanitize_xml_value(str(value)[:1000])  # Limiter la longueur
+            if scraped_data_list:
+                # Idem CSV
+                flattened_data = []
+                all_keys = set()
+                for item in scraped_data_list:
+                    flat_item = {}
+                    for k, v in item.items():
+                        if isinstance(v, (dict, list)):
+                            flat_item[k] = json.dumps(v, ensure_ascii=False)
                         else:
-                            safe_value = sanitize_xml_value(value)
-                        xml_content += f'      <{safe_key}>{safe_value}</{safe_key}>\n'
-                else:
-                    xml_content += f'      <value>{sanitize_xml_value(item)}</value>\n'
-                xml_content += '    </item>\n'
-            
-            xml_content += '  </data>\n</scraping_session>'
-            response.write(xml_content)
+                            flat_item[k] = v
+                        all_keys.add(k)
+                    flattened_data.append(flat_item)
+                
+                writer = csv.DictWriter(response, fieldnames=list(all_keys), dialect='excel')
+                writer.writeheader()
+                writer.writerows(flattened_data)
             return response
-        
-        elif export_format == 'zip_images':
-            # Export ZIP avec toutes les images
-            import zipfile
-            from urllib.parse import urlparse
-            import requests
-            
-            # Créer un buffer pour le ZIP
-            zip_buffer = io.BytesIO()
-            
-            with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-                image_count = 0
-                
-                for item in scraped_data:
-                    category = item.get('category', '')
-                    
-                    # Chercher les images dans les données
-                    if category == 'images':
-                        items_list = item.get('items', [])
-                        for img_item in items_list:
-                            img_url = img_item.get('src') or img_item.get('url', '')
-                            if img_url:
-                                try:
-                                    # Télécharger l'image
-                                    img_response = requests.get(img_url, timeout=10)
-                                    if img_response.status_code == 200:
-                                        # Extraire le nom du fichier
-                                        parsed = urlparse(img_url)
-                                        filename = parsed.path.split('/')[-1] or f'image_{image_count}.jpg'
-                                        if '?' in filename:
-                                            filename = filename.split('?')[0]
-                                        
-                                        zip_file.writestr(f'images/{filename}', img_response.content)
-                                        image_count += 1
-                                except Exception as e:
-                                    # Ignorer les erreurs de téléchargement
-                                    pass
-                    
-                    # Aussi chercher les images dans les items de n'importe quelle catégorie
-                    items_list = item.get('items', [])
-                    for sub_item in items_list:
-                        if isinstance(sub_item, dict):
-                            img_url = sub_item.get('src', '')
-                            if img_url and ('.jpg' in img_url or '.png' in img_url or '.gif' in img_url or '.webp' in img_url):
-                                try:
-                                    img_response = requests.get(img_url, timeout=10)
-                                    if img_response.status_code == 200:
-                                        parsed = urlparse(img_url)
-                                        filename = parsed.path.split('/')[-1] or f'image_{image_count}.jpg'
-                                        if '?' in filename:
-                                            filename = filename.split('?')[0]
-                                        
-                                        zip_file.writestr(f'images/{filename}', img_response.content)
-                                        image_count += 1
-                                except:
-                                    pass
-                
-                # Ajouter un fichier index.json avec les métadonnées
-                index_data = {
-                    'session_id': session.id,
-                    'url': session.url,
-                    'total_images': image_count,
-                    'exported_at': timezone.now().isoformat()
-                }
-                zip_file.writestr('index.json', json.dumps(index_data, indent=2))
-            
-            zip_buffer.seek(0)
-            response = HttpResponse(zip_buffer.getvalue(), content_type='application/zip')
-            response['Content-Disposition'] = f'attachment; filename="images_session_{session_id}.zip"'
-            return response
-        
-        # Si pas de format, retourner les données JSON normales
-        export_data = {
-            'session_id': session.id,
-            'url': session.url,
-            'status': session.status,
-            'scraped_data': scraped_data,
-            'statistics': {
-                'total_items': len(scraped_data),
-                'content_types': session.configuration.get('content_types', []),
-                'total_extracted': len(scraped_data),
-                'pages_crawled': session.total_items or 0
-            },
-            'metadata': {
-                'created_at': session.started_at.isoformat() if session.started_at else None,
-                'completed_at': session.completed_at.isoformat() if session.completed_at else None,
-                'configuration': session.configuration
-            }
-        }
-        
-        return Response(export_data)
-        
-    except ScrapingSession.DoesNotExist:
-        return Response({'error': 'Session non trouvée'}, status=status.HTTP_404_NOT_FOUND)
-    except Exception as e:
-        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
-    def create(self, request):
-        """
-        Lance une nouvelle session de scraping.
-        POST /api/scraping/
-        Body: { "url": "https://example.com", "configuration": {...} }
-        """
-        serializer = CreateScrapingSessionSerializer(data=request.data)
-        if serializer.is_valid():
-            # Crée la session
-            session = serializer.save(user=request.user, status='pending')
-            
-            # Lance le scraping en background (simplifié ici)
-            try:
-                session.status = 'in_progress'
-                session.save()
-                
-                if Scraper:
-                    scraper = Scraper()
-                    # Ici tu peux appeler ton scraper
-                    # result = scraper.scrape(session.url, session.configuration)
-                    # Pour l'instant on simule
-                    pass
-                
-                session.status = 'completed'
-                session.completed_at = timezone.now()
-                session.total_items = 10
-                session.success_count = 10
-                session.save()
-                
-            except Exception as e:
-                session.mark_failed(str(e))
-            
-            return Response(
-                ScrapingSessionSerializer(session).data,
-                status=status.HTTP_201_CREATED
-            )
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
-    @action(detail=True, methods=['post'])
-    def cancel(self, request, pk=None):
-        """
-        Annule une session de scraping en cours.
-        POST /api/scraping/{id}/cancel/
-        """
-        session = self.get_object()
-        if session.status in ['pending', 'in_progress']:
-            session.status = 'failed'
-            session.error_message = 'Annulé par l\'utilisateur'
-            session.completed_at = timezone.now()
-            session.save()
-            return Response({'message': 'Session annulée'}, status=status.HTTP_200_OK)
-        return Response({'error': 'Session déjà terminée'}, status=status.HTTP_400_BAD_REQUEST)
 
+        return JsonResponse({'error': 'Format not supported'}, status=400)
+
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
 
 class ResultsViewSet(viewsets.ReadOnlyModelViewSet):
     """
     ViewSet pour récupérer les résultats de scraping.
     """
     serializer_class = ScrapedDataSerializer
-    permission_classes = [AllowAny]  # Changé pour permettre l'export sans auth en dev
+    permission_classes = [AllowAny]
     
     def get_queryset(self):
         """Retourne uniquement les données des sessions de l'utilisateur."""
         if self.request.user.is_authenticated:
             return ScrapedData.objects.filter(session__user=self.request.user)
-        return ScrapedData.objects.all()  # En dev, permettre l'accès
+        return ScrapedData.objects.all()
     
     def retrieve(self, request, pk=None):
         """
         Récupère les résultats d'une session de scraping par son ID.
         GET /api/results/{session_id}/
-        Note: pk ici représente le session_id, pas le ScrapedData id
         """
         try:
             session = ScrapingSession.objects.get(id=pk)
