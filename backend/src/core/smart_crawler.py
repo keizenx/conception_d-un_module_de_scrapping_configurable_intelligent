@@ -19,7 +19,7 @@ class SmartCrawler:
     - Les répertoires et chemins
     """
     
-    def __init__(self, base_url: str, max_pages: int = 30, timeout: int = 10000):
+    def __init__(self, base_url: str, max_pages: int = 30, timeout: int = 30000):
         self.base_url = base_url
         self.max_pages = max_pages
         self.timeout = timeout
@@ -305,9 +305,17 @@ class SmartCrawler:
         """Crawl une page et extrait toutes les informations."""
         print(f"[*] Crawling: {url}")
         
+        response = None
         try:
-            # Naviguer vers la page
-            response = page.goto(url, wait_until='domcontentloaded', timeout=self.timeout)
+            # Essai 1: Chargement standard (domcontentloaded)
+            try:
+                response = page.goto(url, wait_until='domcontentloaded', timeout=self.timeout)
+            except Exception as e:
+                print(f"    ⚠️ Timeout sur domcontentloaded, tentative en mode 'commit' (plus rapide)...")
+                # Essai 2: Mode dégradé (commit) - on veut juste le HTML
+                response = page.goto(url, wait_until='commit', timeout=self.timeout)
+                # On attend un peu manuellement pour laisser une chance au contenu de s'afficher
+                page.wait_for_timeout(2000)
             
             # Attendre un peu pour que le JavaScript s'exécute
             page.wait_for_timeout(1000)
@@ -428,7 +436,8 @@ class SmartCrawler:
                 {
                     'url': pd['url'],
                     'title': pd['title'],
-                    'path': pd['path']
+                    'path': pd['path'],
+                    'preview': pd.get('preview', {})
                 }
                 for pd in pages_data
             ][:50]  # Top 50 pages

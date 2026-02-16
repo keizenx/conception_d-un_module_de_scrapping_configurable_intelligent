@@ -89,7 +89,7 @@ def scrape_url(
 
 
 def scrape_url_ultra_complete(
-    url: str, use_scroll: bool = True, timeout_seconds: float = 20.0
+    url: str, use_scroll: bool = True, timeout_seconds: float = 60.0
 ) -> Dict[str, Any]:
     """
     🚀 NOUVELLE FONCTION : Extraction ULTRA-COMPLÈTE basée sur les meilleures pratiques

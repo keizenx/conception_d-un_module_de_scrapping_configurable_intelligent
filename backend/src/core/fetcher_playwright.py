@@ -1,9 +1,14 @@
 import asyncio
 import random
 import time
+import warnings
 from typing import Optional, Dict, Any, List
 import httpx
 from playwright.async_api import async_playwright
+
+# Suppress pkg_resources deprecation warning from playwright-stealth
+warnings.filterwarnings("ignore", category=UserWarning, module='pkg_resources')
+warnings.filterwarnings("ignore", category=DeprecationWarning, module='pkg_resources')
 
 # Imports conditionnels pour techniques anti-détection avancées
 try:
@@ -196,7 +201,7 @@ def adaptive_delay():
 
 
 async def fetch_html_playwright(
-    url: str, wait_for_selector: Optional[str] = None, timeout_seconds: float = 20.0
+    url: str, wait_for_selector: Optional[str] = None, timeout_seconds: float = 60.0
 ) -> str:
     """
     Récupère le HTML d'une page avec Playwright optimisé (chaque appel crée un nouveau browser).
@@ -232,12 +237,26 @@ async def fetch_html_playwright(
             await page.route("**/*.{woff,woff2,ttf,eot}", lambda route: route.abort())
             await page.route("**/*.{css}", lambda route: route.abort())
             
-            # Navigation optimisée
-            await page.goto(
-                url, 
-                wait_until="domcontentloaded",  # Plus rapide que networkidle
-                timeout=int(timeout_seconds * 1000)
-            )
+            # Navigation optimisée avec stratégie de fallback
+            try:
+                await page.goto(
+                    url, 
+                    wait_until="domcontentloaded",  # Plus rapide que networkidle
+                    timeout=int(timeout_seconds * 1000)
+                )
+            except Exception as e:
+                if "Timeout" in str(e):
+                    print(f"⚠️ Timeout sur domcontentloaded, tentative en mode 'commit' (plus rapide)...")
+                    # Fallback: on veut juste le HTML, même si tout n'est pas chargé
+                    await page.goto(
+                        url, 
+                        wait_until="commit",
+                        timeout=int(timeout_seconds * 1000)
+                    )
+                    # On attend un peu manuellement
+                    await asyncio.sleep(2)
+                else:
+                    raise e
 
             if wait_for_selector:
                 await page.wait_for_selector(
@@ -266,14 +285,52 @@ async def fetch_html_playwright(
             await browser.close()
 
 
+async def take_screenshot(url: str, timeout_seconds: float = 30.0) -> str:
+    """
+    Prend une capture d'écran d'une page web et la retourne en base64.
+    """
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(
+            headless=PLAYWRIGHT_CONFIG['headless'],
+            args=PLAYWRIGHT_CONFIG['args']
+        )
+        context = await browser.new_context(
+            viewport=PLAYWRIGHT_CONFIG['viewport'],
+            user_agent=get_random_user_agent(),
+            ignore_https_errors=PLAYWRIGHT_CONFIG['ignore_https_errors'],
+            java_script_enabled=PLAYWRIGHT_CONFIG['java_script_enabled'],
+            extra_http_headers=get_optimal_headers()
+        )
+        page = await context.new_page()
+
+        try:
+            await page.goto(url, wait_until="domcontentloaded", timeout=int(timeout_seconds * 1000))
+            
+            # Attendre un peu pour le rendu JS
+            await asyncio.sleep(2)
+
+            screenshot_bytes = await page.screenshot(full_page=True)
+            
+            return screenshot_bytes
+
+        except Exception as e:
+            print(f"⚠️ Erreur lors de la capture d'écran Playwright: {str(e)}")
+            raise e
+            
+        finally:
+            await page.close()
+            await context.close()
+            await browser.close()
+
+
 def fetch_html_with_js(
-    url: str, wait_for_selector: Optional[str] = None, timeout_seconds: float = 20.0
+    url: str, wait_for_selector: Optional[str] = None, timeout_seconds: float = 60.0
 ) -> str:
     return asyncio.run(fetch_html_playwright(url, wait_for_selector, timeout_seconds))
 
 
 async def extract_complete_content_playwright(
-    url: str, timeout_seconds: float = 20.0, scroll_for_dynamic: bool = True
+    url: str, timeout_seconds: float = 60.0, scroll_for_dynamic: bool = True
 ) -> dict:
     """
     Extraction ULTRA-COMPLÈTE d'une page (basée sur les meilleures pratiques gratuites)
@@ -301,8 +358,21 @@ async def extract_complete_content_playwright(
         try:
             print(f"🔍 Extraction ultra-complète : {url}")
             
-            # Navigation optimisée
-            await page.goto(url, wait_until="domcontentloaded", timeout=int(timeout_seconds * 1000))
+            # Navigation optimisée avec fallback
+            try:
+                # On tente d'abord avec un timeout plus généreux (45s au lieu de 20s)
+                timeout_ms = max(int(timeout_seconds * 1000), 45000)
+                await page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
+            except Exception as e:
+                if "Timeout" in str(e):
+                    print(f"⚠️ Timeout sur domcontentloaded, tentative en mode 'commit'...")
+                    # Fallback: on récupère dès que le serveur répond
+                    await page.goto(url, wait_until="commit", timeout=30000)
+                    # IMPORTANT: On attend 5s (au lieu de 2s) pour laisser le JS hydrater la page
+                    print(f"⏳ Attente de 5s pour l'hydratation du contenu...")
+                    await asyncio.sleep(5)
+                else:
+                    raise e
             
             # Pour le contenu dynamique - scroll automatique
             if scroll_for_dynamic:
@@ -327,7 +397,7 @@ async def extract_complete_content_playwright(
                 await asyncio.sleep(2)  # Attendre le chargement après scroll
                 
             # EXTRACTION ULTRA-COMPLÈTE
-            full_content = await page.evaluate("""
+            full_content = await page.evaluate(r"""
                 () => {
                     const result = {
                         metadata: {},
@@ -757,12 +827,24 @@ class PlaywrightFetcher:
             # Injecter les scripts anti-détection avancés
             await self._inject_anti_detection_scripts(page)
             
-            # Navigation avec optimisations
-            await page.goto(
-                url, 
-                wait_until='domcontentloaded',
-                timeout=int(timeout_seconds * 1000)
-            )
+            # Navigation avec optimisations et fallback
+            try:
+                await page.goto(
+                    url, 
+                    wait_until='domcontentloaded',
+                    timeout=int(timeout_seconds * 1000)
+                )
+            except Exception as e:
+                if "Timeout" in str(e):
+                    print(f"⚠️ Timeout sur domcontentloaded, tentative en mode 'commit'...")
+                    await page.goto(
+                        url, 
+                        wait_until='commit',
+                        timeout=int(timeout_seconds * 1000)
+                    )
+                    await asyncio.sleep(2)
+                else:
+                    raise e
             
             # Attendre sélecteur spécifique si demandé
             if wait_for_selector:
@@ -780,7 +862,7 @@ class PlaywrightFetcher:
                 await self._auto_scroll(page)
             
             # EXTRACTION COMPLÈTE DIRECTE (sans appel à la fonction externe)
-            full_content = await page.evaluate("""
+            full_content = await page.evaluate(r"""
                 () => {
                     const result = {
                         metadata: {},

@@ -125,77 +125,6 @@ export const ScrapingProvider = ({ children }) => {
 
   // ========== ANALYSE EN ARRIERE-PLAN ==========
   
-  // Lancer une analyse en arrière-plan
-  const startAnalysisTask = useCallback(async (url, includeSubdomains, onComplete) => {
-    const taskId = Date.now();
-    console.log('🚀 startAnalysisTask appelé - taskId:', taskId, 'url:', url);
-    
-    // Ajouter la tâche à la liste
-    const task = {
-      id: taskId,
-      type: 'analysis',
-      url,
-      status: 'running',
-      progress: 0,
-      startedAt: new Date(),
-      sessionId: null,
-    };
-    
-    console.log('📝 Ajout tâche:', task);
-    setActiveTasks(prev => {
-      console.log('📊 activeTasks avant ajout:', prev);
-      const newTasks = [...prev, task];
-      console.log('📊 activeTasks après ajout:', newTasks);
-      return newTasks;
-    });
-    
-    // Notification de démarrage (silencieuse - pas de son)
-    addNotification({
-      type: 'info',
-      title: '🔍 Analyse lancée',
-      message: `Analyse de ${url} en cours...`,
-    });
-
-    try {
-      // Lancer l'analyse
-      console.log('🌐 Appel API analyzeURL...');
-      const response = await api.analyzeURL(url, includeSubdomains);
-      console.log('✅ Réponse API:', response);
-      
-      if (response.session_id) {
-        // Mettre à jour la tâche avec l'ID de session
-        setActiveTasks(prev => prev.map(t => 
-          t.id === taskId 
-            ? { ...t, sessionId: response.session_id, status: 'polling' }
-            : t
-        ));
-        
-        // Polling pour suivre la progression
-        console.log('🔄 Démarrage polling pour session:', response.session_id);
-        pollAnalysisStatus(taskId, response.session_id, onComplete);
-      }
-      
-      return { taskId, sessionId: response.session_id };
-      
-    } catch (error) {
-      console.error('❌ Erreur startAnalysisTask:', error);
-      // Échec du lancement
-      setActiveTasks(prev => prev.map(t => 
-        t.id === taskId 
-          ? { ...t, status: 'error', error: error.message }
-          : t
-      ));
-      
-      addNotification({
-        type: 'error',
-        title: '❌ Erreur d\'analyse',
-        message: error.message || 'Impossible de lancer l\'analyse',
-      });
-      
-      throw error;
-    }
-  }, [addNotification]);
-
   // Polling pour suivre le statut de l'analyse
   const pollAnalysisStatus = useCallback(async (taskId, sessionId, onComplete) => {
     const pollInterval = 1000; // 1 seconde
@@ -313,36 +242,42 @@ export const ScrapingProvider = ({ children }) => {
     setTimeout(poll, pollInterval);
   }, [addNotification]);
 
-  // ========== SCRAPING EN ARRIERE-PLAN ==========
-  
-  // Lancer un scraping en arrière-plan
-  const startScrapingTask = useCallback(async (url, config, onComplete) => {
+  // Lancer une analyse en arrière-plan
+  const startAnalysisTask = useCallback(async (url, includeSubdomains, onComplete) => {
     const taskId = Date.now();
+    console.log('🚀 startAnalysisTask appelé - taskId:', taskId, 'url:', url);
     
     // Ajouter la tâche à la liste
     const task = {
       id: taskId,
-      type: 'scraping',
+      type: 'analysis',
       url,
-      config,
       status: 'running',
       progress: 0,
       startedAt: new Date(),
       sessionId: null,
     };
     
-    setActiveTasks(prev => [...prev, task]);
+    console.log('📝 Ajout tâche:', task);
+    setActiveTasks(prev => {
+      console.log('📊 activeTasks avant ajout:', prev);
+      const newTasks = [...prev, task];
+      console.log('📊 activeTasks après ajout:', newTasks);
+      return newTasks;
+    });
     
-    // Notification de démarrage
+    // Notification de démarrage (silencieuse - pas de son)
     addNotification({
       type: 'info',
-      title: '🚀 Scraping lancé',
-      message: `Extraction de ${url} en cours...`,
+      title: '🔍 Analyse lancée',
+      message: `Analyse de ${url} en cours...`,
     });
 
     try {
-      // Lancer le scraping - l'API attend la config complète
-      const response = await api.startScraping(config);
+      // Lancer l'analyse
+      console.log('🌐 Appel API analyzeURL...');
+      const response = await api.analyzeURL(url, includeSubdomains);
+      console.log('✅ Réponse API:', response);
       
       if (response.session_id) {
         // Mettre à jour la tâche avec l'ID de session
@@ -353,12 +288,14 @@ export const ScrapingProvider = ({ children }) => {
         ));
         
         // Polling pour suivre la progression
-        pollScrapingStatus(taskId, response.session_id, onComplete);
+        console.log('🔄 Démarrage polling pour session:', response.session_id);
+        pollAnalysisStatus(taskId, response.session_id, onComplete);
       }
       
       return { taskId, sessionId: response.session_id };
       
     } catch (error) {
+      console.error('❌ Erreur startAnalysisTask:', error);
       // Échec du lancement
       setActiveTasks(prev => prev.map(t => 
         t.id === taskId 
@@ -368,14 +305,16 @@ export const ScrapingProvider = ({ children }) => {
       
       addNotification({
         type: 'error',
-        title: '❌ Erreur de scraping',
-        message: error.message || 'Impossible de lancer le scraping',
+        title: '❌ Erreur d\'analyse',
+        message: error.message || 'Impossible de lancer l\'analyse',
       });
       
       throw error;
     }
-  }, [addNotification]);
+  }, [addNotification, pollAnalysisStatus]);
 
+  // ========== SCRAPING EN ARRIERE-PLAN ==========
+  
   // Polling pour suivre le statut du scraping
   const pollScrapingStatus = useCallback(async (taskId, sessionId, onComplete) => {
     const pollInterval = 2000; // 2 secondes
@@ -480,6 +419,129 @@ export const ScrapingProvider = ({ children }) => {
     setTimeout(poll, pollInterval);
   }, [addNotification]);
 
+  // Lancer un scraping en arrière-plan
+  const startScrapingTask = useCallback(async (url, config, onComplete) => {
+    const taskId = Date.now();
+    
+    // Ajouter la tâche à la liste
+    const task = {
+      id: taskId,
+      type: 'scraping',
+      url,
+      config,
+      status: 'running',
+      progress: 0,
+      startedAt: new Date(),
+      sessionId: null,
+    };
+    
+    setActiveTasks(prev => [...prev, task]);
+    
+    // Notification de démarrage
+    addNotification({
+      type: 'info',
+      title: '🚀 Scraping lancé',
+      message: `Extraction de ${url} en cours...`,
+    });
+
+    try {
+      // Lancer le scraping - l'API attend la config complète
+      const response = await api.startScraping(config);
+      
+      if (response.session_id) {
+        // Mettre à jour la tâche avec l'ID de session
+        setActiveTasks(prev => prev.map(t => 
+          t.id === taskId 
+            ? { ...t, sessionId: response.session_id, status: 'polling' }
+            : t
+        ));
+        
+        // Polling pour suivre la progression
+        pollScrapingStatus(taskId, response.session_id, onComplete);
+      }
+      
+      return { taskId, sessionId: response.session_id };
+      
+    } catch (error) {
+      // Échec du lancement
+      setActiveTasks(prev => prev.map(t => 
+        t.id === taskId 
+          ? { ...t, status: 'error', error: error.message }
+          : t
+      ));
+      
+      addNotification({
+        type: 'error',
+        title: '❌ Erreur de scraping',
+        message: error.message || 'Impossible de lancer le scraping',
+      });
+      
+      throw error;
+    }
+  }, [addNotification, pollScrapingStatus]);
+
+  // Lancer un scraping par lot en arrière-plan
+  const startBatchScrapingTask = useCallback(async (urls, config, onComplete) => {
+    const taskId = Date.now();
+    
+    // Ajouter la tâche à la liste
+    const task = {
+      id: taskId,
+      type: 'scraping', // On garde 'scraping' pour réutiliser le polling
+      url: urls[0] + (urls.length > 1 ? ` (+${urls.length-1} autres)` : ''),
+      config,
+      status: 'running',
+      progress: 0,
+      startedAt: new Date(),
+      sessionId: null,
+      isBatch: true
+    };
+    
+    setActiveTasks(prev => [...prev, task]);
+    
+    // Notification de démarrage
+    addNotification({
+      type: 'info',
+      title: '🚀 Scraping par lot lancé',
+      message: `Extraction de ${urls.length} pages en cours...`,
+    });
+
+    try {
+      // Lancer le scraping
+      const response = await api.startBatchScraping(urls, config);
+      
+      if (response.session_id) {
+        // Mettre à jour la tâche avec l'ID de session
+        setActiveTasks(prev => prev.map(t => 
+          t.id === taskId 
+            ? { ...t, sessionId: response.session_id, status: 'polling' }
+            : t
+        ));
+        
+        // Polling pour suivre la progression (réutilise la même fonction de polling)
+        pollScrapingStatus(taskId, response.session_id, onComplete);
+      }
+      
+      return { taskId, sessionId: response.session_id };
+      
+    } catch (error) {
+      // Échec du lancement
+      setActiveTasks(prev => prev.map(t => 
+        t.id === taskId 
+          ? { ...t, status: 'error', error: error.message }
+          : t
+      ));
+      
+      addNotification({
+        type: 'error',
+        title: '❌ Erreur de scraping',
+        message: error.message || 'Impossible de lancer le scraping par lot',
+      });
+      
+      throw error;
+    }
+  }, [addNotification, pollScrapingStatus]);
+
   // Annuler une tâche
   const cancelTask = useCallback((taskId) => {
     setActiveTasks(prev => prev.filter(t => t.id !== taskId));
@@ -514,6 +576,7 @@ export const ScrapingProvider = ({ children }) => {
     isScrapingInProgress,
     isAnalysisInProgress,
     startScrapingTask,
+    startBatchScrapingTask,
     startAnalysisTask,
     cancelTask,
     addNotification,

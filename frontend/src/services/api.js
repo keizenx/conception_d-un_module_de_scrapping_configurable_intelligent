@@ -47,6 +47,17 @@ class APIService {
     return response.json();
   }
 
+  // Méthode générique POST
+  async post(endpoint, data) {
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify(data),
+    });
+    
+    return this.handleResponse(response);
+  }
+
   // ==================== AUTH ====================
   
   async login(email, password) {
@@ -343,6 +354,25 @@ class APIService {
         url: config.url,
         content_types: config.selectedTypes,
         depth: config.depth,
+        delay: config.delay,
+        user_agent: config.userAgent,
+        timeout: config.timeout,
+        custom_selectors: config.customSelectors,
+        export_format: config.format,
+      }),
+    });
+    
+    return this.handleResponse(response);
+  }
+
+  async startBatchScraping(urls, config) {
+    const response = await fetch(`${API_BASE_URL}/scraping/scrape_selected/`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({
+        urls: urls,
+        content_types: config.selectedTypes,
+        depth: 1,
         delay: config.delay,
         user_agent: config.userAgent,
         timeout: config.timeout,

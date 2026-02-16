@@ -4,9 +4,14 @@
 # RELEVANT FILES: api/models.py, api/views.py, config/urls.py, requirements.txt
 
 import os
+import warnings
 from pathlib import Path
 from datetime import timedelta
 from dotenv import load_dotenv
+
+# Suppress pkg_resources deprecation warning globally
+warnings.filterwarnings("ignore", category=UserWarning, module='pkg_resources')
+warnings.filterwarnings("ignore", category=DeprecationWarning, module='pkg_resources')
 
 # Charger les variables d'environnement
 load_dotenv()

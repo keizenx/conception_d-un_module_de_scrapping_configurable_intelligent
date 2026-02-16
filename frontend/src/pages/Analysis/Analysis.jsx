@@ -14,6 +14,7 @@ export default function Analysis() {
   const location = useLocation();
   const { 
     startScrapingTask, 
+    startBatchScrapingTask,
     startAnalysisTask, 
     isScrapingInProgress, 
     isAnalysisInProgress,
@@ -24,6 +25,10 @@ export default function Analysis() {
   
   // State management
   const [url, setUrl] = useState('');
+  const [isBatchMode, setIsBatchMode] = useState(false);
+  const [batchUrls, setBatchUrls] = useState('');
+  const [screenshot, setScreenshot] = useState(null);
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [includeSubdomains, setIncludeSubdomains] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [showResults, setShowResults] = useState(false);
@@ -64,7 +69,8 @@ export default function Analysis() {
     depth: '2',
     delay: '500',
     userAgent: 'Chrome (Desktop)',
-    timeout: '30'
+    timeout: '30',
+    max_pages: ''
   });
   
   // Custom selectors
@@ -73,6 +79,10 @@ export default function Analysis() {
     { name: 'Prix', selector: 'span.price' }
   ]);
   
+  // Selected pages from analysis
+  const [selectedPages, setSelectedPages] = useState(new Set());
+  const [activePreviewPage, setActivePreviewPage] = useState(null);
+
   // Storage format
   const [selectedFormat, setSelectedFormat] = useState('json');
   const [includeImagesZip, setIncludeImagesZip] = useState(false);
@@ -136,6 +146,63 @@ export default function Analysis() {
       return false;
     }
   };
+  
+  // Get list of URLs from batch textarea
+  const getBatchUrlList = () => {
+    return batchUrls
+      .split('\n')
+      .map(u => u.trim())
+      .filter(u => u.length > 0)
+      .map(u => normalizeUrl(u));
+  };
+
+  // Handle Batch Configuration (Skip Analysis)
+   const handleConfigureBatch = () => {
+     const urls = getBatchUrlList();
+     if (urls.length === 0) {
+       alert('Veuillez entrer au moins une URL');
+       return;
+     }
+     
+     // Check if valid URLs
+     const invalidUrls = urls.filter(u => !isValidUrl(u));
+     if (invalidUrls.length > 0) {
+       alert(`Certaines URLs sont invalides : \n${invalidUrls.slice(0, 3).join('\n')}${invalidUrls.length > 3 ? '...' : ''}`);
+       return;
+     }
+     
+     // Set first URL as main URL for site info
+     const mainUrl = urls[0];
+     setUrl(mainUrl);
+     
+     // Mock site info
+     try {
+       const domain = new URL(mainUrl).hostname;
+       setSiteInfo({
+         domain: domain,
+         pageCount: urls.length,
+         contentTypesCount: 5 // Default types
+       });
+     } catch (e) {
+       // Ignore
+     }
+     
+     // Default content types for batch mode
+     const defaultTypes = [
+       { id: 'text_content', icon: '📝', title: 'Texte', description: 'Contenu textuel principal', count: 'Auto' },
+       { id: 'media', icon: '🖼️', title: 'Médias', description: 'Images et vidéos', count: 'Auto' },
+       { id: 'links', icon: '🔗', title: 'Liens', description: 'Tous les liens', count: 'Auto' },
+       { id: 'tables', icon: '📊', title: 'Tableaux', description: 'Tableaux de données', count: 'Auto' },
+       { id: 'metadata', icon: '📋', title: 'Métadonnées', description: 'Titre, description, mots-clés', count: 'Auto' },
+     ];
+     setContentTypes(defaultTypes);
+     // Pre-select text and media
+     setSelectedTypes(['text_content', 'media']);
+     
+     // Skip to configuration
+     setCurrentStep(4);
+     setShowResults(true); 
+   };
   
   // Handle URL analysis - Mode ASYNCHRONE
   const handleAnalyze = async () => {
@@ -268,14 +335,29 @@ export default function Analysis() {
     
     // Mettre à jour les chemins
     if (results.paths) {
+      const discoveredPaths = results.paths.paths || [];
+      const mainPages = results.paths.main_pages || [];
+      const allPages = results.paths.all_pages || [];
+      
       setPaths({
-        discovered: results.paths.paths || [],
-        mainPages: results.paths.main_pages || [],
-        allPages: results.paths.all_pages || [],
+        discovered: discoveredPaths,
+        mainPages: mainPages,
+        allPages: allPages,
         navigation: results.paths.navigation || {},
         pagesCrawled: results.paths.pages_crawled || 0,
         total: results.paths.total_found || 0
       });
+      
+      // Auto-select first page for preview
+       if (allPages.length > 0) {
+         setActivePreviewPage(allPages[0]);
+       } else if (mainPages.length > 0) {
+         setActivePreviewPage(mainPages[0]);
+       } else if (discoveredPaths.length > 0) {
+          setActivePreviewPage({ url: discoveredPaths[0], title: discoveredPaths[0], preview: null });
+       } else {
+         setActivePreviewPage(null);
+       }
     }
     
     // Afficher les résultats
@@ -283,6 +365,36 @@ export default function Analysis() {
     setCurrentStep(3);
     setIsAnalyzing(false);
   };
+
+  const handlePreview = async () => {
+    if (!url) {
+      addNotification({ type: 'error', title: 'URL manquante', message: 'Veuillez entrer une URL pour la prévisualisation.' });
+      return;
+    }
+    const normalizedUrl = normalizeUrl(url);
+    if (!isValidUrl(normalizedUrl)) {
+      addNotification({ type: 'error', title: 'URL invalide', message: 'Veuillez entrer une URL valide.' });
+      return;
+    }
+    
+    setIsPreviewLoading(true);
+    setScreenshot(null);
+    
+    try {
+      const response = await api.post('/analysis/preview/', { url: normalizedUrl });
+      if (response.data.screenshot) {
+        setScreenshot(response.data.screenshot);
+      } else {
+        throw new Error(response.data.error || 'La capture d\'écran n\'a pas pu être générée.');
+      }
+    } catch (error) {
+      console.error('Erreur lors de la prévisualisation:', error);
+      addNotification({ type: 'error', title: 'Erreur de prévisualisation', message: error.message || 'Une erreur est survenue.' });
+    } finally {
+      setIsPreviewLoading(false);
+    }
+  };
+
   
   // Toggle content type selection
   const toggleContentType = (typeId) => {
@@ -310,6 +422,28 @@ export default function Analysis() {
     setCustomSelectors(updated);
   };
   
+  // Toggle page selection
+  const togglePageSelection = (pageUrl) => {
+    const newSelection = new Set(selectedPages);
+    if (newSelection.has(pageUrl)) {
+      newSelection.delete(pageUrl);
+    } else {
+      newSelection.add(pageUrl);
+    }
+    setSelectedPages(newSelection);
+  };
+
+  // Toggle all pages
+  const toggleAllPages = (allPages) => {
+    if (!allPages || allPages.length === 0) return;
+    
+    if (selectedPages.size === allPages.length) {
+      setSelectedPages(new Set());
+    } else {
+      setSelectedPages(new Set(allPages.map(p => p.url)));
+    }
+  };
+
   // Start scraping
   const handleStartScraping = async () => {
     if (selectedTypes.length === 0) {
@@ -329,11 +463,73 @@ export default function Analysis() {
         delay: parseInt(advancedOptions.delay) || 500,
         user_agent: advancedOptions.userAgent,
         timeout: parseInt(advancedOptions.timeout) || 30,
+        max_pages: advancedOptions.max_pages ? parseInt(advancedOptions.max_pages) : null,
         custom_selectors: customSelectors.filter(s => s.name && s.selector),
         output_format: selectedFormat,
         include_images_zip: includeImagesZip
       };
       
+      // Handle Batch Mode (Manual Input)
+      if (isBatchMode) {
+        const urls = getBatchUrlList();
+        if (urls.length === 0) {
+           alert('Veuillez entrer au moins une URL');
+           return;
+        }
+        
+        // Use first URL as main URL for config/display
+        config.url = urls[0];
+        
+        const result = await startBatchScrapingTask(urls, config, (completionResult) => {
+          // Callback appelé quand le scraping est terminé
+          if (completionResult.success) {
+            console.log('Scraping par lot terminé avec succès:', completionResult.sessionId);
+          } else {
+            console.error('Scraping par lot échoué:', completionResult.error);
+          }
+        });
+        
+        // Rediriger vers le dashboard ou rester ici
+        addNotification({
+          type: 'info',
+          title: '🚀 Scraping par lot lancé !',
+          message: `Vous pouvez naviguer librement. Session #${result.sessionId}`,
+          sessionId: result.sessionId,
+        });
+        
+        // Rediriger directement vers le dashboard pour voir la progression
+        navigate('/dashboard');
+        
+        return; // Stop here for batch mode
+      }
+      
+      // Handle Selected Pages from Analysis (Treat as Batch)
+      if (selectedPages.size > 0) {
+         const urls = Array.from(selectedPages);
+         
+         // Use main URL or first selected URL for config
+         config.url = urls[0];
+         
+         const result = await startBatchScrapingTask(urls, config, (completionResult) => {
+           if (completionResult.success) {
+             console.log('Scraping sélectif terminé avec succès:', completionResult.sessionId);
+           } else {
+             console.error('Scraping sélectif échoué:', completionResult.error);
+           }
+         });
+         
+         addNotification({
+           type: 'info',
+           title: '🚀 Scraping sélectif lancé !',
+           message: `Extraction de ${urls.length} pages sélectionnées. Session #${result.sessionId}`,
+           sessionId: result.sessionId,
+         });
+         
+         navigate('/dashboard');
+         return;
+      }
+      
+      // Single URL Mode (Full Crawl)
       // Lancer le scraping en arrière-plan via le contexte
       const result = await startScrapingTask(url, config, (completionResult) => {
         // Callback appelé quand le scraping est terminé
@@ -403,80 +599,70 @@ export default function Analysis() {
         
         {/* Step 1: URL Input */}
         {!showResults && (
-          <div className="card analysis-card">
-            <div className="card-header">
-              <div className="card-header-content">
-                <span className="card-icon material-icons">public</span>
-                <div className="card-header-text">
-                  <h2 className="card-title">Quel site souhaitez-vous scraper ?</h2>
-                  <p className="card-description">
-                    Entrez simplement l'URL du site web que vous voulez analyser. Notre système va automatiquement détecter les informations disponibles.
+          <div className="analysis-step-1-grid">
+            <div className="card analysis-card">
+              <div className="card-body">
+                <div className="form-group">
+                  <label htmlFor="urlInput" className="form-label">URL du site web</label>
+                  <div className="input-with-icon-and-button">
+                    <span className="material-icons input-icon">link</span>
+                    <input
+                      type="text"
+                      id="urlInput"
+                      className="form-control"
+                      value={url}
+                      onChange={(e) => setUrl(e.target.value)}
+                      placeholder="https://exemple.com"
+                      onKeyPress={(e) => e.key === 'Enter' && handleAnalyze()}
+                    />
+                  </div>
+                </div>
+                
+                <div className="form-group-inline">
+                  <div className="checkbox-group">
+                    <input
+                      type="checkbox"
+                      id="includeSubdomains"
+                      checked={includeSubdomains}
+                      onChange={(e) => setIncludeSubdomains(e.target.checked)}
+                    />
+                    <label htmlFor="includeSubdomains" className="checkbox-label">
+                      <span className="checkbox-title">Inclure les sous-domaines</span>
+                      <span className="checkbox-description">Scraper également les sous-domaines du site principal</span>
+                    </label>
+                  </div>
+                </div>
+                
+                <div className="form-actions">
+                  <button
+                    className="btn btn-primary"
+                    onClick={handleAnalyze}
+                    disabled={isAnalyzing}
+                  >
+                    <span className="material-icons">{isAnalyzing ? 'hourglass_empty' : 'rocket_launch'}</span>
+                    {isAnalyzing ? 'Analyse en cours...' : 'Analyser le site'}
+                  </button>
+                </div>
+              </div>
+              
+              {/* Message informatif pendant l'analyse asynchrone */}
+              {isAnalyzing && sessionId && (
+                <div className="async-analysis-info">
+                  <div className="spinner"></div>
+                  <h3>Analyse en cours...</h3>
+                  <p>
+                    L'analyse se poursuit en arrière-plan. Vous pouvez naviguer librement, 
+                    une notification vous préviendra quand c'est terminé.
                   </p>
+                  <button 
+                    className="btn btn-secondary"
+                    onClick={() => navigate('/dashboard')}
+                  >
+                    Aller au Dashboard
+                  </button>
                 </div>
-              </div>
+              )}
             </div>
-            
-            <div className="card-body">
-              <div className="form-group">
-                <label htmlFor="urlInput" className="form-label">URL du site web</label>
-                <div className="input-with-icon">
-                  <span className="material-icons input-icon">link</span>
-                  <input
-                    type="text"
-                    id="urlInput"
-                    className="form-control"
-                    value={url}
-                    onChange={(e) => setUrl(e.target.value)}
-                    placeholder="https://exemple.com"
-                    onKeyPress={(e) => e.key === 'Enter' && handleAnalyze()}
-                  />
-                </div>
-              </div>
-              
-              <div className="form-group-inline">
-                <div className="checkbox-group">
-                  <input
-                    type="checkbox"
-                    id="includeSubdomains"
-                    checked={includeSubdomains}
-                    onChange={(e) => setIncludeSubdomains(e.target.checked)}
-                  />
-                  <label htmlFor="includeSubdomains" className="checkbox-label">
-                    <span className="checkbox-title">Inclure les sous-domaines</span>
-                    <span className="checkbox-description">Scraper également les sous-domaines du site principal</span>
-                  </label>
-                </div>
-              </div>
-              
-              <div className="form-actions">
-                <button
-                  className="btn btn-primary"
-                  onClick={handleAnalyze}
-                  disabled={isAnalyzing}
-                >
-                  <span className="material-icons">{isAnalyzing ? 'hourglass_empty' : 'rocket_launch'}</span>
-                  {isAnalyzing ? 'Analyse en cours...' : 'Analyser le site'}
-                </button>
-              </div>
-            </div>
-            
-            {/* Message informatif pendant l'analyse asynchrone */}
-            {isAnalyzing && sessionId && (
-              <div className="async-analysis-info">
-                <div className="spinner"></div>
-                <h3>Analyse en cours...</h3>
-                <p>
-                  L'analyse se poursuit en arrière-plan. Vous pouvez naviguer librement, 
-                  une notification vous préviendra quand c'est terminé.
-                </p>
-                <button 
-                  className="btn btn-secondary"
-                  onClick={() => navigate('/dashboard')}
-                >
-                  Aller au Dashboard
-                </button>
-              </div>
-            )}
           </div>
         )}
         
@@ -498,26 +684,45 @@ export default function Analysis() {
               <div className="site-info-card">
                 <div className="site-info-grid">
                   <div className="info-item">
-                    <span className="info-label">Domaine</span>
-                    <span className="info-value">{siteInfo.domain}</span>
+                    <span className="info-label">{isBatchMode ? 'Mode' : 'Domaine'}</span>
+                    <span className="info-value">{isBatchMode ? 'Scraping par lot' : siteInfo.domain}</span>
                   </div>
                   <div className="info-item">
-                    <span className="info-label">Pages détectées</span>
+                    <span className="info-label">{isBatchMode ? 'URLs à traiter' : 'Pages détectées'}</span>
                     <span className="info-value" style={{ color: 'var(--accent)' }}>
                       {siteInfo.pageCount}
                     </span>
                   </div>
+                  {!isBatchMode && (
                   <div className="info-item">
                     <span className="info-label">Types de contenu</span>
                     <span className="info-value" style={{ color: 'var(--success)' }}>
                       {siteInfo.contentTypesCount}
                     </span>
                   </div>
+                  )}
                 </div>
               </div>
               
+              <div className="analysis-split-view" style={{ 
+                display: 'flex', 
+                gap: '0', 
+                borderTop: '1px solid var(--border-color)',
+                height: '600px', // Fixed height for scrolling
+                position: 'relative'
+              }}>
+                
+                {/* Left Pane: Navigation & List */}
+                <div className="analysis-list-pane" style={{ 
+                  width: '40%', 
+                  minWidth: '320px', 
+                  overflowY: 'auto', 
+                  borderRight: '1px solid var(--border-color)',
+                  padding: '1rem'
+                }}>
+
               {/* Subdomains Section */}
-              {includeSubdomains && subdomains.total > 0 && (
+              {!isBatchMode && includeSubdomains && subdomains.total > 0 && (
                 <div className="subdomains-section">
                   <h3 className="section-title">
                     <span>🌐</span>
@@ -585,12 +790,47 @@ export default function Analysis() {
               )}
               
               {/* Paths/Directories Section */}
-              {paths.total > 0 && (
+              {!isBatchMode && paths.total > 0 && (
                 <div className="paths-section">
-                  <h3 className="section-title">
-                    <span>📂</span>
-                    Pages découvertes ({paths.total}) - {paths.pagesCrawled} pages crawlées
-                  </h3>
+                  <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <h3 className="section-title" style={{ margin: 0 }}>
+                      <span>📂</span>
+                      Pages découvertes ({paths.total}) - {paths.pagesCrawled} pages crawlées
+                    </h3>
+                    <button 
+                      className="btn btn-sm btn-outline" 
+                      onClick={() => toggleAllPages(paths.allPages || paths.discovered.map(u => ({url: u})))}
+                      style={{ fontSize: '0.8rem', padding: '0.25rem 0.5rem' }}
+                    >
+                      {selectedPages.size > 0 && selectedPages.size === (paths.allPages?.length || paths.discovered?.length) 
+                        ? 'Tout désélectionner' 
+                        : 'Tout sélectionner'}
+                    </button>
+                  </div>
+                  
+                  {/* Selection Info */}
+                  {selectedPages.size > 0 && (
+                    <div className="selection-info" style={{ 
+                      background: 'rgba(var(--primary-rgb), 0.1)', 
+                      padding: '0.5rem 1rem', 
+                      borderRadius: '4px', 
+                      margin: '1rem 0',
+                      border: '1px solid var(--primary)',
+                      color: 'var(--primary)',
+                      fontWeight: '500',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
+                    }}>
+                      <span>{selectedPages.size} page(s) sélectionnée(s) pour l'extraction</span>
+                      <button 
+                        onClick={() => setSelectedPages(new Set())}
+                        style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', textDecoration: 'underline', fontSize: '0.85rem' }}
+                      >
+                        Effacer
+                      </button>
+                    </div>
+                  )}
                   
                   {/* Main Navigation Pages */}
                   {paths.mainPages && paths.mainPages.length > 0 && (
@@ -601,11 +841,37 @@ export default function Analysis() {
                       </h4>
                       <div className="paths-list">
                         {paths.mainPages.map((page, idx) => (
-                          <div key={idx} className="path-item main-page">
+                          <div 
+                            key={idx} 
+                            className={`path-item main-page ${selectedPages.has(page.url) ? 'selected' : ''} ${activePreviewPage?.url === page.url ? 'active-preview' : ''}`}
+                            onClick={(e) => {
+                              // If clicking checkbox/wrapper, toggle selection
+                              if (e.target.type === 'checkbox' || e.target.closest('.checkbox-wrapper')) {
+                                togglePageSelection(page.url);
+                              } else {
+                                // Otherwise set preview
+                                setActivePreviewPage(page);
+                              }
+                            }}
+                            style={{ 
+                              cursor: 'pointer',
+                              border: activePreviewPage?.url === page.url ? '1px solid var(--primary)' : (selectedPages.has(page.url) ? '1px solid var(--primary)' : '1px solid var(--border-color)'),
+                              background: activePreviewPage?.url === page.url ? 'rgba(var(--primary-rgb), 0.1)' : (selectedPages.has(page.url) ? 'rgba(var(--primary-rgb), 0.05)' : 'var(--card-bg)'),
+                              position: 'relative'
+                            }}
+                          >
+                            <div className="checkbox-wrapper" style={{ marginRight: '0.75rem', display: 'flex', alignItems: 'center', zIndex: 2 }}>
+                              <input 
+                                type="checkbox" 
+                                checked={selectedPages.has(page.url)} 
+                                readOnly 
+                                style={{ transform: 'scale(1.2)', cursor: 'pointer' }}
+                              />
+                            </div>
                             <span className="path-icon">🔗</span>
-                            <div className="path-details">
-                              <span className="path-text">{page.text || 'Sans titre'}</span>
-                              <span className="path-url">{page.url}</span>
+                            <div className="path-details" style={{ display: 'flex', flexDirection: 'column', gap: '2px', overflow: 'hidden', flex: 1 }}>
+                              <span className="path-text" style={{ fontWeight: '500', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{page.text || 'Sans titre'}</span>
+                              <span className="path-url" style={{ fontSize: '0.85rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{page.url}</span>
                             </div>
                           </div>
                         ))}
@@ -622,112 +888,222 @@ export default function Analysis() {
                       </h4>
                       <div className="paths-list">
                         {paths.allPages.map((page, idx) => (
-                          <div key={idx} className="path-item-with-preview">
-                            <div className="path-header">
-                              <span className="path-icon">📄</span>
-                              <div className="path-details">
-                                <span className="path-text">{page.title || 'Sans titre'}</span>
-                                <a href={page.url} target="_blank" rel="noopener noreferrer" className="path-url">
-                                  {page.url}
-                                </a>
-                              </div>
+                          <div 
+                            key={idx} 
+                            className={`path-item-with-preview ${selectedPages.has(page.url) ? 'selected' : ''} ${activePreviewPage?.url === page.url ? 'active-preview' : ''}`}
+                            onClick={(e) => {
+                                // If clicking checkbox/wrapper, toggle selection
+                                if (e.target.type === 'checkbox' || e.target.closest('.selection-indicator')) {
+                                  togglePageSelection(page.url);
+                                } else {
+                                  // Otherwise set preview
+                                  setActivePreviewPage(page);
+                                }
+                            }}
+                            style={{ 
+                              cursor: 'pointer',
+                              border: activePreviewPage?.url === page.url ? '1px solid var(--primary)' : (selectedPages.has(page.url) ? '1px solid var(--primary)' : '1px solid var(--border-color)'),
+                              background: activePreviewPage?.url === page.url ? 'rgba(var(--primary-rgb), 0.1)' : 'var(--card-bg)',
+                              position: 'relative',
+                              padding: '0.75rem',
+                              borderRadius: '8px',
+                              marginBottom: '0.5rem',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '0.75rem'
+                            }}
+                          >
+                            <div className="selection-indicator" style={{
+                              marginRight: '0.5rem'
+                            }}>
+                              <input 
+                                type="checkbox" 
+                                checked={selectedPages.has(page.url)} 
+                                readOnly 
+                                style={{ transform: 'scale(1.2)', cursor: 'pointer' }}
+                              />
                             </div>
                             
-                            {/* Preview Section */}
-                            {page.preview && (
-                              <div className="page-preview">
-                                {/* Meta Description */}
-                                {page.preview.meta?.description && (
-                                  <div className="preview-description">
-                                    <span className="preview-label">📝 Description:</span>
-                                    <span className="preview-text">{page.preview.meta.description}</span>
-                                  </div>
-                                )}
-                                
-                                {/* Text Preview */}
-                                {page.preview.text_preview && (
-                                  <div className="preview-text-content">
-                                    <span className="preview-label">📄 Aperçu:</span>
-                                    <span className="preview-text">{page.preview.text_preview}</span>
-                                  </div>
-                                )}
-                                
-                                {/* Images Preview */}
-                                {page.preview.images && page.preview.images.length > 0 && (
-                                  <div className="preview-images">
-                                    <span className="preview-label">🖼️ Images ({page.preview.images.length}):</span>
-                                    <div className="images-grid">
-                                      {page.preview.images.slice(0, 4).map((img, imgIdx) => (
-                                        <div key={imgIdx} className="preview-image-item">
-                                          <img 
-                                            src={img.src} 
-                                            alt={img.alt || 'Image'} 
-                                            loading="lazy"
-                                            onError={(e) => e.target.style.display = 'none'}
-                                          />
-                                          {img.alt && <span className="image-alt">{img.alt}</span>}
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </div>
-                                )}
-                                
-                                {/* Stats */}
-                                {page.preview.stats && (
-                                  <div className="preview-stats">
-                                    <span className="preview-label">📊 Statistiques:</span>
-                                    <div className="stats-grid">
-                                      {page.preview.stats.total_links > 0 && (
-                                        <span className="stat-item">🔗 {page.preview.stats.total_links} liens</span>
-                                      )}
-                                      {page.preview.stats.total_images > 0 && (
-                                        <span className="stat-item">🖼️ {page.preview.stats.total_images} images</span>
-                                      )}
-                                      {page.preview.stats.total_forms > 0 && (
-                                        <span className="stat-item">📝 {page.preview.stats.total_forms} formulaires</span>
-                                      )}
-                                      {page.preview.stats.total_tables > 0 && (
-                                        <span className="stat-item">📋 {page.preview.stats.total_tables} tableaux</span>
-                                      )}
-                                      {page.preview.stats.total_lists > 0 && (
-                                        <span className="stat-item">📌 {page.preview.stats.total_lists} listes</span>
-                                      )}
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            )}
+                            <span className="path-icon">📄</span>
+                            <div className="path-details" style={{ display: 'flex', flexDirection: 'column', gap: '2px', overflow: 'hidden', flex: 1 }}>
+                              <span className="path-text" style={{ fontWeight: '500', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{page.title || 'Sans titre'}</span>
+                              <span className="path-url" style={{ fontSize: '0.85rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {page.url}
+                              </span>
+                            </div>
                           </div>
                         ))}
                       </div>
                     </div>
                   )}
-                  
+
                   {/* All Discovered Paths (simple list) */}
                   {paths.discovered && paths.discovered.length > 0 && (
-                    <div className="all-paths-group">
-                      <h4 className="subdomain-group-title">
-                        <span className="status-badge">📄</span>
+                    <div className="all-paths-group" style={{ marginTop: '2rem' }}>
+                      <h4 className="subdomain-group-title" style={{ fontSize: '1rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <span className="status-badge" style={{ fontSize: '1.2rem' }}>📄</span>
                         Tous les chemins ({paths.discovered.length})
                       </h4>
-                      <div className="paths-list">
+                      <div className="paths-list" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                         {paths.discovered.map((path, idx) => (
-                          <div key={idx} className="path-item">
-                            <span className="path-icon">📄</span>
-                            <span className="path-url">{path}</span>
+                          <div 
+                            key={idx} 
+                            className={`path-item ${selectedPages.has(path) ? 'selected' : ''}`}
+                            onClick={(e) => {
+                              // If clicking checkbox/wrapper, toggle selection
+                              if (e.target.type === 'checkbox' || e.target.closest('.checkbox-wrapper')) {
+                                togglePageSelection(path);
+                              } else {
+                                // Otherwise set preview
+                                setActivePreviewPage({
+                                  url: path,
+                                  title: path,
+                                  preview: null
+                                });
+                              }
+                            }}
+                            style={{ 
+                              cursor: 'pointer',
+                              border: activePreviewPage?.url === path ? '1px solid var(--primary)' : (selectedPages.has(path) ? '1px solid var(--primary)' : '1px solid var(--border-color)'),
+                              background: activePreviewPage?.url === path ? 'rgba(var(--primary-rgb), 0.1)' : (selectedPages.has(path) ? 'rgba(var(--primary-rgb), 0.05)' : 'var(--card-bg)'),
+                              display: 'flex',
+                              alignItems: 'center',
+                              padding: '0.75rem',
+                              borderRadius: '6px',
+                              transition: 'all 0.2s ease'
+                            }}
+                          >
+                            <div className="checkbox-wrapper" style={{ marginRight: '0.75rem', display: 'flex', alignItems: 'center' }}>
+                              <input 
+                                type="checkbox" 
+                                checked={selectedPages.has(path)} 
+                                readOnly 
+                                style={{ transform: 'scale(1.2)', cursor: 'pointer' }}
+                              />
+                            </div>
+                            <span className="path-icon" style={{ marginRight: '0.5rem' }}>📄</span>
+                            <span className="path-url" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1, fontSize: '0.9rem' }}>{path}</span>
                           </div>
                         ))}
                       </div>
+                    </div>
+                  )}
+
+                    </div>
+                  )}
+
+                </div> {/* End Left Pane */}
+                
+                {/* Right Pane: Preview */}
+                <div className="analysis-preview-pane" style={{ 
+                  flex: 1, 
+                  background: 'var(--bg-secondary)',
+                  padding: '1.5rem',
+                  overflowY: 'auto'
+                }}>
+                  {activePreviewPage ? (
+                    <div className="preview-container">
+                      <div className="preview-header" style={{ marginBottom: '1.5rem', paddingBottom: '1rem', borderBottom: '1px solid var(--border-color)' }}>
+                        <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.2rem' }}>{activePreviewPage.title || 'Sans titre'}</h3>
+                        <a href={activePreviewPage.url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary)', textDecoration: 'none', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          {activePreviewPage.url} <span>↗</span>
+                        </a>
+                      </div>
+                      
+                      {activePreviewPage.preview ? (
+                        <div className="page-preview-content">
+                          {/* Stats Cards */}
+                          {activePreviewPage.preview.stats && (
+                            <div className="stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
+                               <div className="stat-card" style={{ background: 'var(--card-bg)', padding: '1rem', borderRadius: '8px', textAlign: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+                                 <span style={{ display: 'block', fontSize: '1.5rem', fontWeight: 'bold', color: 'var(--primary)' }}>{activePreviewPage.preview.stats.total_links || 0}</span>
+                                 <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Liens</span>
+                               </div>
+                               <div className="stat-card" style={{ background: 'var(--card-bg)', padding: '1rem', borderRadius: '8px', textAlign: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+                                 <span style={{ display: 'block', fontSize: '1.5rem', fontWeight: 'bold', color: 'var(--accent)' }}>{activePreviewPage.preview.stats.total_images || 0}</span>
+                                 <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Images</span>
+                               </div>
+                               <div className="stat-card" style={{ background: 'var(--card-bg)', padding: '1rem', borderRadius: '8px', textAlign: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+                                 <span style={{ display: 'block', fontSize: '1.5rem', fontWeight: 'bold', color: 'var(--success)' }}>{activePreviewPage.preview.stats.total_forms || 0}</span>
+                                 <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Formulaires</span>
+                               </div>
+                            </div>
+                          )}
+                          
+                          {/* Meta Info */}
+                          {activePreviewPage.preview.meta && (
+                            <div className="preview-section" style={{ marginBottom: '2rem' }}>
+                              <h4 style={{ fontSize: '1rem', marginBottom: '1rem', color: 'var(--text-color)' }}>Méta-données</h4>
+                              <div style={{ background: 'var(--card-bg)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                                {activePreviewPage.preview.meta.description && (
+                                  <div style={{ marginBottom: '1rem' }}>
+                                    <span style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Description</span>
+                                    <p style={{ margin: 0, fontSize: '0.9rem', lineHeight: '1.5' }}>{activePreviewPage.preview.meta.description}</p>
+                                  </div>
+                                )}
+                                {activePreviewPage.preview.meta['og:image'] && (
+                                  <div>
+                                    <span style={{ display: 'block', fontSize: '0.8rem', fontWeight: '600', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Image Sociale</span>
+                                    <img src={activePreviewPage.preview.meta['og:image']} alt="OG Image" style={{ maxWidth: '100%', borderRadius: '4px', maxHeight: '200px', objectFit: 'cover' }} />
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* Text Preview */}
+                          {activePreviewPage.preview.text_preview && (
+                            <div className="preview-section" style={{ marginBottom: '2rem' }}>
+                              <h4 style={{ fontSize: '1rem', marginBottom: '1rem', color: 'var(--text-color)' }}>Aperçu du contenu</h4>
+                              <div style={{ background: 'var(--card-bg)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '0.9rem', lineHeight: '1.6', maxHeight: '300px', overflowY: 'auto' }}>
+                                {activePreviewPage.preview.text_preview}
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* Images Gallery */}
+                          {activePreviewPage.preview.images && activePreviewPage.preview.images.length > 0 && (
+                            <div className="preview-section">
+                              <h4 style={{ fontSize: '1rem', marginBottom: '1rem', color: 'var(--text-color)' }}>Images principales</h4>
+                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '1rem' }}>
+                                {activePreviewPage.preview.images.slice(0, 8).map((img, i) => (
+                                  <div key={i} style={{ position: 'relative', aspectRatio: '1', background: 'var(--card-bg)', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border-color)' }}>
+                                    <img 
+                                      src={img.src} 
+                                      alt={img.alt || ''} 
+                                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                      loading="lazy"
+                                      onError={(e) => e.target.style.display = 'none'}
+                                    />
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="empty-preview" style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--text-muted)' }}>
+                          <span style={{ fontSize: '2rem', display: 'block', marginBottom: '1rem' }}>👻</span>
+                          <p>Aucune prévisualisation disponible pour cette page.</p>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="empty-selection" style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', textAlign: 'center' }}>
+                      <div style={{ fontSize: '3rem', marginBottom: '1rem', opacity: 0.5 }}>👈</div>
+                      <h3 style={{ margin: '0 0 0.5rem 0' }}>Sélectionnez une page</h3>
+                      <p style={{ margin: 0, maxWidth: '300px' }}>Cliquez sur une page dans la liste de gauche pour voir un aperçu de son contenu.</p>
                     </div>
                   )}
                 </div>
-              )}
+
+              </div> {/* End Split View */}
               
               {/* Detected Content Types */}
               <div className="content-types-section">
                 <h3 className="section-title">
                   <span>📦</span>
-                  Types de contenu détectés
+                  {isBatchMode ? 'Types de contenu à extraire' : 'Types de contenu détectés'}
                 </h3>
                 
                 {contentTypes.length > 0 ? (
@@ -954,6 +1330,16 @@ export default function Analysis() {
                         value={advancedOptions.timeout}
                         onChange={(e) => setAdvancedOptions({...advancedOptions, timeout: e.target.value})}
                         placeholder="30"
+                      />
+                    </div>
+                    <div className="option-group">
+                      <label className="option-label">Pages max à scraper</label>
+                      <input
+                        type="number"
+                        className="option-input"
+                        value={advancedOptions.max_pages}
+                        onChange={(e) => setAdvancedOptions({...advancedOptions, max_pages: e.target.value})}
+                        placeholder="Auto"
                       />
                     </div>
                   </div>

@@ -51,6 +51,7 @@ urlpatterns = [
         {'post': 'quick_analyze'}, 
         permission_classes=[AllowAny]
     ), name='analysis-quick-analyze'),
+    path('analysis/preview/', AnalysisViewSet.as_view({'post': 'preview'}), name='analysis-preview'),
     path('analysis/analyze/', AnalysisViewSet.as_view({'post': 'analyze'}), name='analysis-analyze'),
     
     # Routes d'export - AVANT le router pour éviter les conflits

@@ -375,6 +375,68 @@ input[type="checkbox"] {
     cursor: not-allowed;
 }
 
+.analysis-step-1-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+  align-items: start;
+}
+
+.preview-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 1rem;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px; /* Adjust as needed */
+}
+
+.preview-panel img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 10px;
+}
+
+.empty-preview {
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.empty-preview .material-icons {
+  font-size: 4rem;
+  margin-bottom: 1rem;
+}
+
+.input-with-icon-and-button {
+  position: relative;
+}
+
+.input-with-icon-and-button .input-icon {
+  position: absolute;
+  left: 1.25rem;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 1.25rem;
+  color: var(--text-muted);
+}
+
+.input-with-icon-and-button .form-control {
+  padding-right: 100px; /* Space for the button */
+}
+
+.input-with-icon-and-button .btn {
+  position: absolute;
+  right: 0.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+
+
 /* Analysis Results Section */
 .analysis-results {
     display: none;

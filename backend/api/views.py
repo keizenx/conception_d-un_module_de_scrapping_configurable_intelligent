@@ -41,6 +41,7 @@ try:
     from core.site_checker import SiteChecker, filter_scrapable_sites
     from core.path_finder import discover_paths
     from core.smart_crawler import discover_paths_smart
+    from core.fetcher_playwright import take_screenshot
     SCRAPER_AVAILABLE = True
 except ImportError as e:
     print(f"Import error: {e}")
@@ -49,6 +50,7 @@ except ImportError as e:
     discover_subdomains = None
     discover_paths = None
     discover_paths_smart = None
+    take_screenshot = None
     SiteChecker = None
     filter_scrapable_sites = None
     SCRAPER_AVAILABLE = False
@@ -730,6 +732,34 @@ class AnalysisViewSet(viewsets.ViewSet):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
     @action(detail=False, methods=['post'])
+    def preview(self, request):
+        """
+        Génère un aperçu (screenshot) d'une URL.
+        POST /api/analysis/preview/
+        """
+        url = request.data.get('url')
+        if not url:
+            return Response({'error': 'URL manquante'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not SCRAPER_AVAILABLE or not take_screenshot:
+            return Response({'error': 'La fonctionnalité de capture d\'écran n\'est pas disponible.'}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+        try:
+            import asyncio
+            import base64
+            
+            # Exécuter la fonction asynchrone dans le thread principal de l'événementiel
+            screenshot_bytes = asyncio.run(take_screenshot(url))
+            
+            # Encoder en base64 pour l'envoyer en JSON
+            screenshot_base64 = base64.b64encode(screenshot_bytes).decode('utf-8')
+            
+            return Response({'screenshot': screenshot_base64, 'url': url})
+
+        except Exception as e:
+            return Response({'error': f'Erreur lors de la capture: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['post'])
     def analyze(self, request):
         """
         Analyse une URL pour détecter les patterns et la structure.
@@ -744,6 +774,7 @@ class AnalysisViewSet(viewsets.ViewSet):
         """
         url = request.data.get('url')
         include_subdomains = request.data.get('include_subdomains', False)
+        max_pages = request.data.get('max_pages')
         advanced_options = request.data.get('advanced_options', {})
         
         if not url:
@@ -752,6 +783,7 @@ class AnalysisViewSet(viewsets.ViewSet):
         # Configuration avec options avancées
         config = {
             'include_subdomains': include_subdomains,
+            'max_pages': max_pages,
             'depth': advanced_options.get('depth', 2),
             'delay': advanced_options.get('delay', 500),
             'user_agent': advanced_options.get('user_agent', 'Chrome (Desktop)'),
@@ -889,7 +921,15 @@ class AnalysisViewSet(viewsets.ViewSet):
                 )
                 
                 # Ajuster le nombre de pages à crawler
-                max_pages_to_crawl = min(recommended_max, 100)  # Maximum absolu de 100
+                # L'utilisateur peut forcer une limite via la requête
+                user_max_pages = config.get('max_pages')
+                
+                if user_max_pages and isinstance(user_max_pages, int) and user_max_pages > 0:
+                    max_pages_to_crawl = user_max_pages
+                    session.add_log(f"⚙️ Limite de pages forcée par l'utilisateur: {max_pages_to_crawl}", 'info')
+                else:
+                    # Sinon, on utilise la recommandation
+                    max_pages_to_crawl = min(recommended_max, 100)  # Maximum absolu de 100
                 
                 session.add_log(f"[*] Crawl intelligent du site avec Playwright...")
                 session.add_log(f"🕷️ Lancement du Smart Crawler (max {max_pages_to_crawl} pages sur ~{estimated_pages})...", 'info')
@@ -1040,9 +1080,170 @@ class AnalysisViewSet(viewsets.ViewSet):
             
         except Exception as e:
             import traceback
+            print(f"❌ ERREUR SCRAPING CRITIQUE: {str(e)}")
+            traceback.print_exc()
             session.add_log(f"[!] Erreur: {str(e)}", 'error')
             session.add_log(f"{traceback.format_exc()}", 'error')
             session.mark_failed(str(e))
+
+
+def extract_content_from_soup(session, url, soup, content_types):
+    """
+    Fonction utilitaire pour extraire le contenu d'une page selon les types demandés.
+    """
+    from .models import ScrapedData
+    
+    extracted_count = 0
+    scraped_data_items = []
+    
+    if not content_types:
+        content_types = ['text_content', 'links', 'metadata']
+    
+    # Éviter les doublons de log
+    session.add_log(f"[*] Extraction pour types: {', '.join(content_types)}", 'info')
+    
+    for type_name in content_types:
+        try:
+            if type_name == 'media':
+                # Récupérer TOUTES les images et médias
+                media_elements = []
+                media_urls_seen = set()
+                
+                images = soup.find_all('img')
+                videos = soup.find_all('video')
+                video_sources = soup.find_all('source')
+                media_links = soup.find_all('a', href=True)
+                
+                # Traiter les images
+                for img in images:
+                    src = img.get('src', '') or img.get('data-src', '') or img.get('data-original', '')
+                    if src and src not in media_urls_seen:
+                        media_urls_seen.add(src)
+                        alt = img.get('alt', '')
+                        title = img.get('title', alt)
+                        if src.startswith('/'):
+                            from urllib.parse import urljoin
+                            src = urljoin(url, src)
+                        media_elements.append({'src': src, 'alt': alt, 'title': title or 'Image', 'type': 'image'})
+                
+                # Traiter les vidéos
+                for video in videos:
+                    src = video.get('src', '')
+                    if src and src not in media_urls_seen:
+                        media_urls_seen.add(src)
+                        if src.startswith('/'):
+                            from urllib.parse import urljoin
+                            src = urljoin(url, src)
+                        media_elements.append({'src': src, 'alt': '', 'title': 'Vidéo', 'type': 'video'})
+                        
+                # Groupement intelligent
+                grouped_media = {'images': [], 'videos': [], 'audios': [], 'documents': [], 'links': []}
+                for media in media_elements:
+                    mtype = media['type']
+                    if mtype == 'image': grouped_media['images'].append(media)
+                    elif mtype == 'video': grouped_media['videos'].append(media)
+                
+                # Créer entrées groupées
+                for media_type, items in grouped_media.items():
+                    if items:
+                        data_item = {
+                            'titre': f"Médias ({media_type}) - {len(items)}",
+                            'type_media': media_type,
+                            'nb_elements': len(items),
+                            'elements': items,
+                            'apercu': ' | '.join([m['src'].split('/')[-1][:30] for m in items[:5]])
+                        }
+                        ScrapedData.objects.create(session=session, data=data_item, element_type='grouped_media', source_url=url)
+                        scraped_data_items.append(data_item)
+                        extracted_count += 1
+                        
+            elif type_name == 'text_content':
+                # Extraction de texte intelligente
+                text_elements = soup.find_all(['h1', 'h2', 'h3', 'p', 'div', 'li', 'span'])
+                grouped_content = {'headings': [], 'paragraphs': [], 'lists': [], 'other': []}
+                
+                for elem in text_elements:
+                    text = elem.get_text(strip=True)
+                    if len(text) > 10:
+                        tag = elem.name
+                        if tag in ['h1', 'h2', 'h3']: grouped_content['headings'].append(text)
+                        elif tag == 'p': grouped_content['paragraphs'].append(text)
+                        elif tag == 'li': grouped_content['lists'].append(text)
+                        else: grouped_content['other'].append(text)
+                
+                for cat, texts in grouped_content.items():
+                    if texts:
+                        # Limiter pour éviter les objets trop gros
+                        texts_sample = texts[:100]
+                        data_item = {
+                            'titre': f"Texte ({cat})",
+                            'categorie': cat,
+                            'nb_elements': len(texts),
+                            'elements': texts_sample,
+                            'apercu': ' | '.join(texts[:3])[:200]
+                        }
+                        ScrapedData.objects.create(session=session, data=data_item, element_type='grouped_content', source_url=url)
+                        scraped_data_items.append(data_item)
+                        extracted_count += 1
+
+            elif type_name == 'links':
+                links = soup.find_all('a', href=True)
+                valid_links = []
+                for link in links:
+                    href = link.get('href', '')
+                    text = link.get_text(strip=True)
+                    if href and not href.startswith('#'):
+                         if href.startswith('/'):
+                            from urllib.parse import urljoin
+                            href = urljoin(url, href)
+                         valid_links.append({'url': href, 'text': text})
+                
+                if valid_links:
+                    data_item = {
+                        'titre': f"Liens ({len(valid_links)})",
+                        'nb_elements': len(valid_links),
+                        'elements': valid_links[:200]  # Limit
+                    }
+                    ScrapedData.objects.create(session=session, data=data_item, element_type='links', source_url=url)
+                    scraped_data_items.append(data_item)
+                    extracted_count += 1
+
+            elif type_name == 'metadata':
+                title = soup.title.string if soup.title else ''
+                meta_desc = ''
+                desc_tag = soup.find('meta', attrs={'name': 'description'})
+                if desc_tag: meta_desc = desc_tag.get('content', '')
+                
+                data_item = {
+                    'titre': 'Métadonnées',
+                    'page_title': title,
+                    'description': meta_desc,
+                    'charset': soup.original_encoding or 'utf-8'
+                }
+                ScrapedData.objects.create(session=session, data=data_item, element_type='metadata', source_url=url)
+                scraped_data_items.append(data_item)
+                extracted_count += 1
+
+            elif type_name == 'tables':
+                tables = soup.find_all('table')
+                for i, table in enumerate(tables):
+                    rows = table.find_all('tr')
+                    headers = [th.get_text(strip=True) for th in table.find_all('th')]
+                    data_item = {
+                        'titre': f'Tableau {i+1}',
+                        'lignes': len(rows),
+                        'colonnes': len(headers),
+                        'headers': ', '.join(headers),
+                        'contenu_html': str(table)[:500]
+                    }
+                    ScrapedData.objects.create(session=session, data=data_item, element_type='table', source_url=url)
+                    scraped_data_items.append(data_item)
+                    extracted_count += 1
+
+        except Exception as e:
+            session.add_log(f"[!] Erreur extraction {type_name}: {e}", 'warning')
+            
+    return extracted_count, scraped_data_items
 
 
 class ScrapingViewSet(viewsets.ModelViewSet):
@@ -1150,6 +1351,11 @@ class ScrapingViewSet(viewsets.ModelViewSet):
             # Récupérer les résultats de la configuration sauvegardée
             config = session.configuration or {}
             
+            # Récupérer les données scrapées (priorité à la DB, fallback sur config)
+            scraped_items = [item.data for item in session.scraped_data.all()]
+            if not scraped_items and config.get('scraped_data'):
+                scraped_items = config.get('scraped_data')
+            
             return Response({
                 'status': session.status,
                 'url': session.url,
@@ -1160,7 +1366,8 @@ class ScrapingViewSet(viewsets.ModelViewSet):
                 'site_check': config.get('site_check', {}),
                 'page_count': session.total_items or 0,
                 'completed_at': session.completed_at,
-                'error_message': session.error_message
+                'error_message': session.error_message,
+                'scraped_data': scraped_items
             })
         except ScrapingSession.DoesNotExist:
             return Response({'error': 'Session non trouvée'}, status=status.HTTP_404_NOT_FOUND)
@@ -1249,6 +1456,154 @@ class ScrapingViewSet(viewsets.ModelViewSet):
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
+    @action(detail=False, methods=['post'])
+    def scrape_selected(self, request):
+        """
+        Démarre le scraping sur une liste spécifique d'URLs.
+        POST /api/scraping/scrape_selected/
+        Body: { 
+            "urls": ["https://example.com/page1", "https://example.com/page2"],
+            "content_types": [...],
+            "configuration": { ... }
+        }
+        """
+        urls = request.data.get('urls', [])
+        if not urls or not isinstance(urls, list):
+            return Response({'error': 'Liste d\'URLs requise'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Determine user
+        if request.user.is_authenticated:
+            user = request.user
+        else:
+            user, _ = User.objects.get_or_create(
+                username='test_scraper',
+                defaults={'email': 'test@scraper.com'}
+            )
+            
+        # Use first URL as main URL
+        main_url = urls[0] if urls else "http://batch-job"
+        
+        # Create session
+        session = ScrapingSession.objects.create(
+            user=user,
+            url=main_url,
+            status='in_progress',
+            configuration={
+                'urls': urls,
+                'is_batch': True,
+                'content_types': request.data.get('content_types', []),
+                'depth': 1,
+                'delay': request.data.get('delay', 500),
+                'user_agent': request.data.get('user_agent', 'Chrome (Desktop)'),
+                'timeout': request.data.get('timeout', 30),
+                'custom_selectors': request.data.get('custom_selectors', []),
+                'export_format': request.data.get('export_format', 'json'),
+            }
+        )
+        
+        session.add_log(f"[*] Démarrage du scraping par lot pour {len(urls)} URLs", 'info')
+        
+        # Run in background thread
+        from threading import Thread
+        
+        def run_batch_scraping():
+            try:
+                from src.core.fetcher_playwright import fetch_html_smart
+                from bs4 import BeautifulSoup
+                import time as time_module
+                
+                config = session.configuration
+                delay = config.get('delay', 500)
+                timeout = config.get('timeout', 30)
+                custom_selectors = config.get('custom_selectors', [])
+                
+                total_extracted = 0
+                
+                for i, url in enumerate(urls):
+                    # Check cancellation (status might be updated from another thread/process)
+                    session.refresh_from_db()
+                    if session.status == 'failed':
+                        break
+                        
+                    session.add_log(f"[{i+1}/{len(urls)}] Traitement de {url}", 'info')
+                    
+                    try:
+                        # Fetch
+                        html_content = fetch_html_smart(url, use_js=True, timeout_seconds=float(timeout))
+                        if not html_content:
+                            session.add_log(f"[!] Impossible de récupérer {url}", 'warning')
+                            continue
+                        
+                        soup = BeautifulSoup(html_content, 'html.parser')
+                        
+                        # Apply delay
+                        if delay > 0 and i < len(urls) - 1:
+                            time_module.sleep(delay / 1000.0)
+                            
+                        # Extract Custom Selectors
+                        if custom_selectors:
+                            for selector_config in custom_selectors:
+                                selector_name = selector_config.get('name', 'Champ')
+                                css_selector = selector_config.get('selector', '')
+                                if css_selector:
+                                    try:
+                                        elements = soup.select(css_selector)
+                                        if elements:
+                                            custom_items = []
+                                            for elem in elements[:50]:
+                                                custom_items.append({
+                                                    'text': elem.get_text(strip=True),
+                                                    'html': str(elem)[:500]
+                                                })
+                                            
+                                            ScrapedData.objects.create(
+                                                session=session,
+                                                data={
+                                                    'category': f'custom_{selector_name.lower().replace(" ", "_")}',
+                                                    'category_fr': selector_name,
+                                                    'count': len(custom_items),
+                                                    'items': custom_items
+                                                },
+                                                element_type='custom',
+                                                source_url=url
+                                            )
+                                            total_extracted += len(custom_items)
+                                    except Exception as e:
+                                        session.add_log(f"[!] Erreur sélecteur {selector_name} sur {url}: {e}", 'warning')
+                        
+                        # Extract Content Types (Smart Extraction)
+                        content_types = config.get('content_types', [])
+                        # Run extraction if types selected or if no custom selectors (default fallback)
+                        if content_types or not custom_selectors:
+                            cnt, _ = extract_content_from_soup(session, url, soup, content_types)
+                            total_extracted += cnt
+                                
+                    except Exception as e:
+                        session.add_log(f"[!] Erreur sur {url}: {str(e)}", 'error')
+                
+                # Finish
+                session.refresh_from_db()
+                if session.status != 'failed':
+                    session.status = 'completed'
+                    session.completed_at = timezone.now()
+                    session.total_items = total_extracted
+                    session.success_count = total_extracted
+                    session.add_log(f"[✓] Scraping par lot terminé. {total_extracted} éléments extraits.", 'success')
+                    session.save()
+                    
+            except Exception as e:
+                session.mark_failed(str(e))
+                
+        thread = Thread(target=run_batch_scraping)
+        thread.start()
+        
+        return Response({
+            'session_id': session.id,
+            'status': session.status,
+            'url': session.url,
+            'message': f'Scraping lancé pour {len(urls)} pages'
+        }, status=status.HTTP_201_CREATED)
+
     @action(detail=False, methods=['post'], permission_classes=[AllowAny])
     def start(self, request):
         """
