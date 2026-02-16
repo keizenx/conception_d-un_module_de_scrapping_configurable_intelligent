@@ -66,7 +66,7 @@ Suivez ces étapes pour installer Scraper Pro sur votre machine locale.
 Clonez le dépôt sur votre machine :
 
 ```bash
-git clone https://github.com/keizenx/scraper-pro.git
+git clone conception_d-un_module_de_scrapping_configurable_intelligent
 cd scraper-pro
 ```
 
