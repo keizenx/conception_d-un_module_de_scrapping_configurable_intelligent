@@ -67,7 +67,7 @@ Clonez le dépôt sur votre machine :
 
 ```bash
 git clone conception_d-un_module_de_scrapping_configurable_intelligent
-cd scraper-pro
+cd conception_d-un_module_de_scrapping_configurable_intelligent
 ```
 
 ### 2. Installation Automatisée (Recommandée)
